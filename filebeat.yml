@@ -1,0 +1,36 @@
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /var/log/audit/audit.log
+    multiline.pattern: '^type='
+    multiline.negate: true
+    multiline.match: after
+    scan_frequency: 5s
+    tail_files: true
+    fields:
+      log_type: audit_file_access
+    fields_under_root: true
+
+output.file:
+  path: "/var/log/filebeat_output"
+  filename: "access-tiering.json"
+  # 🔁 Remove unsupported codec
+  # codec:
+  #   line:
+  #     pretty: false
+
+  # ✅ Use format that *is* supported
+  # Filebeat always writes newline-delimited JSON without needing codec
+  # This gives you a proper `.ndjson` structure line-by-line
+  # If you want `.ndjson`, use this filename
+  rotate_every_kb: 10000
+  number_of_files: 5
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 7
+  permissions: 0640
