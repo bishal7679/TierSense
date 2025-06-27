@@ -15,12 +15,12 @@ filebeat.inputs:
 output.file:
   path: "/var/log/filebeat_output"
   filename: "access-tiering.json"
-  # 🔁 Remove unsupported codec
+  # Remove unsupported codec
   # codec:
   #   line:
   #     pretty: false
 
-  # ✅ Use format that *is* supported
+  # Use format that *is* supported
   # Filebeat always writes newline-delimited JSON without needing codec
   # This gives you a proper `.ndjson` structure line-by-line
   # If you want `.ndjson`, use this filename
