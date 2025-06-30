@@ -19,7 +19,7 @@ TierSense transforms noisy file access logs into meaningful **tiering decisions*
 Logs → Parser → Heatmap → LLM Suggestion → Tiering Advice
 ```
 - **Logs:** Captured using Filebeat from simulated or real environments.
-- **Parser:** Converts CSV logs into structured data.
+- **Parser:** Converts JSON logs into structured data.
 - **Heatmap:** Aggregates file usage patterns.
 - **LLM:** (Gemini/OpenAI) gives tiering advice—hot, warm, or cold—based on usage.
 - **Visualization:** Heatmap output to help human users too.
