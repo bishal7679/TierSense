@@ -15,8 +15,9 @@ TierSense transforms noisy file access logs into meaningful **tiering decisions*
  
 ### ⚙️ Key Pipeline:
 
+```
 Logs → Parser → Heatmap → LLM Suggestion → Tiering Advice
- 
+```
 - **Logs:** Captured using Filebeat from simulated or real environments.
 
 - **Parser:** Converts CSV logs into structured data.
@@ -94,22 +95,16 @@ View the heatmap result:
 sudo xdg-open /var/log/filebeat_output/access-heatmap.png
 
 ```
-This will display the visual heatmap that reflects your file usage patterns, like this -
+This will display the visual heatmap that reflects your file usage patterns.
+
+---
+
+## 📊 Heatmap Sample Output
 
 <p align="center">
 <img src="https://github.com/user-attachments/assets/a82ffe0c-84fd-4049-add4-eabc80040cf2" alt="access_heatmap" width="900" height="450"/>
 </p>
 
----
-
-## 🌡 Heatmap Sample Output
-
-- Hot Files (frequent access)
-
-- Warm Files (moderate access)
-
-- Cold Files (rarely accessed)
- 
 These visuals give you an intuitive idea of how your data is being used—and how it should be stored.
  
 ---
