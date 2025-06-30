@@ -2,7 +2,7 @@
 
 ---
 <p align="center">
-<img src="https://github.com/user-attachments/assets/ef229501-4a49-48b2-b06d-cee521be674a" alt="TierSense Logo" width="400" height="350"/>
+<img src="https://github.com/user-attachments/assets/ef229501-4a49-48b2-b06d-cee521be674a" alt="TierSense Logo" width="430" height="380"/>
 </p>
 
 *TierSense is an intelligent, LLM-powered advisor that helps optimize file storage across hot, warm, and cold tiers based on real-time access patterns. Think of it as a brain for your storage systems—analyzing file access logs and recommending exactly which files should live where.*
@@ -102,12 +102,12 @@ This will display the visual heatmap that reflects your file usage patterns.
 ## 📊 Heatmap Sample Output
 
 <p align="center">
-<img src="https://github.com/user-attachments/assets/a82ffe0c-84fd-4049-add4-eabc80040cf2" alt="access_heatmap" width="900" height="450"/>
+<img src="https://github.com/user-attachments/assets/a82ffe0c-84fd-4049-add4-eabc80040cf2" alt="access_heatmap" width="800" height="400"/>
 </p>
 
 These visuals give you an intuitive idea of how your data is being used—and how it should be stored.
  
----
+---80
 
 ## 💼 Business Use Cases
 
