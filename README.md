@@ -107,7 +107,7 @@ This will display the visual heatmap that reflects your file usage patterns.
 
 These visuals give you an intuitive idea of how your data is being used—and how it should be stored.
  
----80
+---
 
 ## 💼 Business Use Cases
 
