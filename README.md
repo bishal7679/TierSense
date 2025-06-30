@@ -5,7 +5,7 @@
 <img src="https://github.com/user-attachments/assets/ef229501-4a49-48b2-b06d-cee521be674a" alt="TierSense Logo" width="400" height="350"/>
 </p>
 
-TierSense is an intelligent, LLM-powered advisor that helps optimize file storage across hot, warm, and cold tiers based on real-time access patterns. Think of it as a brain for your storage systems—analyzing file access logs and recommending exactly which files should live where.
+*TierSense is an intelligent, LLM-powered advisor that helps optimize file storage across hot, warm, and cold tiers based on real-time access patterns. Think of it as a brain for your storage systems—analyzing file access logs and recommending exactly which files should live where.*
  
 ---
  
@@ -94,9 +94,12 @@ View the heatmap result:
 sudo xdg-open /var/log/filebeat_output/access-heatmap.png
 
 ```
+This will display the visual heatmap that reflects your file usage patterns, like this -
 
-This will display the visual heatmap that reflects your file usage patterns 📊.
- 
+<p align="center">
+<img src="https://github.com/user-attachments/assets/a82ffe0c-84fd-4049-add4-eabc80040cf2" alt="access_heatmap" width="900" height="450"/>
+</p>
+
 ---
 
 ## 🌡 Heatmap Sample Output
