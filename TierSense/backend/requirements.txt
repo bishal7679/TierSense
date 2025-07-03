@@ -1,8 +1,0 @@
-fastapi
-uvicorn[standard]
-python-dotenv
-matplotlib
-google-generativeai
-openai
-anthropic
-requests
