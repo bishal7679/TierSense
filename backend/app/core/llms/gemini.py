@@ -43,7 +43,7 @@ def generate(access_counts: dict) -> str:
         genai.configure(api_key=api_key)
 
         prompt = _build_prompt(access_counts)
-        model = genai.GenerativeModel("models/gemini-2.0-pro")
+        model = genai.GenerativeModel("models/gemini-2.0-flash")
         response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
