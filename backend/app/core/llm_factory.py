@@ -16,7 +16,9 @@
 #         return copilot.generate(access_counts)
 #     else:
 #         raise ValueError(f"Unsupported LLM type: {llm_type}")
+
 import json
+import re
 from app.core.llms import gemini, gpt, claude, ollama, copilot
 
 def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
@@ -36,12 +38,17 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
         raise ValueError(f"Unsupported LLM type: {llm_type}")
 
     try:
-        parsed = json.loads(raw_output)
+        # 🔧 Clean markdown-like formatting (```json ... ```)
+        cleaned_output = re.sub(r"```(?:json)?\n?(.*?)```", r"\1", raw_output, flags=re.DOTALL).strip()
+
+        # 🧪 Attempt to parse as JSON
+        parsed = json.loads(cleaned_output)
+
         summary = {"total_files": 0, "hot_tier": 0, "warm_tier": 0, "cold_tier": 0}
         analysis = []
 
         for path, tier in parsed.items():
-            tier_upper = tier.upper()
+            tier_upper = tier.strip().upper()
             summary["total_files"] += 1
             if tier_upper == "HOT":
                 summary["hot_tier"] += 1
@@ -53,11 +60,11 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
             analysis.append({
                 "path": path,
                 "tier": tier_upper,
-                "score": 0.0,  # You can replace with actual score if needed
-                "access_frequency": "unknown"  # Replace with logic if available
+                "score": 0.0,  # Placeholder if no scoring logic
+                "access_frequency": "unknown"  # Optional enhancement
             })
 
         return {"summary": summary, "analysis": analysis}
 
-    except json.JSONDecodeError:
-        raise ValueError("LLM did not return valid JSON")
+    except Exception as e:
+        raise ValueError(f"LLM did not return valid JSON: {e}")
