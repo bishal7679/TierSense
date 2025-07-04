@@ -43,7 +43,7 @@ def parse_logs(log_dir=None):
                         name = name_match.group(1)
 
                         full_path = os.path.join(cwd, name)
-                        if full_path.startswith("/"):
+                        if full_path.startswith("/mnt/data"):
                             access_counts[full_path] += 1
                             access_times[full_path].append("")
                             good += 1
