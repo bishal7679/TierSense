@@ -307,19 +307,21 @@ export default function TierSense() {
                   <CardContent>
                     <div className="grid grid-cols-4 gap-4">
                       <div className="text-center">
-                        <div className="text-2xl font-semibold text-slate-900">{results.summary.total_files}</div>
+                      <div className="text-2xl font-semibold text-slate-900">
+                        {results?.summary?.total_files ?? 0}
+                      </div>  
                         <div className="text-sm text-slate-600">Total Files</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-2xl font-semibold text-red-600">{results.summary.hot_tier}</div>
+                        <div className="text-2xl font-semibold text-red-600">{results?.summary?.hot_tier ?? 0}</div>
                         <div className="text-sm text-slate-600">HOT</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-2xl font-semibold text-yellow-600">{results.summary.warm_tier}</div>
+                        <div className="text-2xl font-semibold text-yellow-600">{results?.summary?.warm_tier ?? 0}</div>
                         <div className="text-sm text-slate-600">WARM</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-2xl font-semibold text-blue-600">{results.summary.cold_tier}</div>
+                        <div className="text-2xl font-semibold text-blue-600">{results?.summary?.cold_tier ?? 0}</div>
                         <div className="text-sm text-slate-600">COLD</div>
                       </div>
                     </div>
@@ -333,7 +335,7 @@ export default function TierSense() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      {results.analysis.map((item, index) => (
+                      {results?.analysis?.map((item, index) => (
                         <div key={index} className="flex items-center space-x-3">
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium text-slate-900 truncate">{item.path}</div>
