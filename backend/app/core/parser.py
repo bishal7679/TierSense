@@ -1,4 +1,4 @@
-import os
+import os 
 import json
 import re
 from collections import defaultdict
@@ -28,7 +28,6 @@ def parse_logs(log_dir=None):
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
                 try:
-                    # Some lines might be plain text audit logs
                     if "type=CWD" in line and 'cwd="' in line:
                         match = re.search(r'cwd="([^"]+)"', line)
                         if match:
@@ -44,9 +43,9 @@ def parse_logs(log_dir=None):
                         name = name_match.group(1)
 
                         full_path = os.path.join(cwd, name)
-                        if full_path.startswith("/mnt/data"):
+                        if full_path.startswith("/"):
                             access_counts[full_path] += 1
-                            access_times[full_path].append("")  # Timestamp not available here
+                            access_times[full_path].append("")
                             good += 1
                     else:
                         bad += 1
@@ -62,10 +61,6 @@ def parse_logs(log_dir=None):
     print(f"\n📊 Found {len(access_counts)} unique paths. Total good: {total_good}, bad: {total_bad}")
     return access_counts, access_times
 
-
 def extract_event_id(line):
-    """
-    Extracts unique audit event ID like `audit(1751441251.869:763)` → "763"
-    """
     match = re.search(r'audit\(\d+\.\d+:(\d+)\)', line)
     return match.group(1) if match else None

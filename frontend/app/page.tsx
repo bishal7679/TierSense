@@ -89,12 +89,18 @@ export default function TierSense() {
     const formData = new FormData()
     formData.append("llm", selectedLLM)
     formData.append("api_key", apiKey)
-    if (uploadedFile) {
-      formData.append("file", uploadedFile)
-    }
+    if (inputSource === "upload") {
+  if (!uploadedFile) {
+    throw new Error("Please select and upload a valid .ndjson file.")
+  }
+  formData.append("file", uploadedFile)
+} else {
+  // Fallback to dummy file to satisfy required field
+  formData.append("file", new Blob([], { type: "application/x-ndjson" }), "empty.ndjson")
+}
 
-    const response = await fetch("http://34.234.87.251:8000/api/run-tiering", {
-      method: "POST", // ✅ important
+    const response = await fetch("http://100.24.37.54:8000/api/run-tiering", {
+      method: "POST", 
       body: formData,
     })
 
@@ -109,9 +115,7 @@ export default function TierSense() {
     // alert("Run failed: " + error.message)
   }
 }
-
-  
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file && file.name.endsWith(".ndjson")) {
       setUploadedFile(file)
