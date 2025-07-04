@@ -1,23 +1,41 @@
-from fastapi import APIRouter, Query
-from app.core.parser import parse_logs
-from app.core.heatmap import generate_heatmap
-from app.core.llm_factory import generate_tiering_suggestions as get_llm_response
+# app/routes/run.py
+
 import os
+import tempfile
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi.responses import JSONResponse
+from app.core.parser import parse_logs
+from app.core.llm_factory import generate_tiering_suggestions
 
 router = APIRouter()
 
-@router.get("/run-tiering")
-def run_tiering(llm: str = Query("gemini")):
-    log_dir = os.getenv("LOG_DIR", "/mnt/nfs-logs")
-    access_counts, access_times = parse_logs(log_dir)
+@router.post("/run-tiering")
+async def run_tiering(
+    llm: str = Form(...),
+    api_key: str = Form(...),  # You can optionally use this for secure calls to LLMs
+    file: UploadFile = File(...)
+):
+    try:
+        # Save uploaded .ndjson file to temp dir
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".ndjson") as tmp_file:
+            tmp_file.write(await file.read())
+            tmp_path = tmp_file.name
 
-    if not access_counts:
-        return {"error": "No access data found."}
+        # Set path for parser
+        log_dir = os.path.dirname(tmp_path)
+        access_counts, access_times = parse_logs(log_dir)
 
-    generate_heatmap(access_counts)
-    tiering = get_llm_response(llm, access_counts)
+        if not access_counts:
+            raise HTTPException(status_code=400, detail="No valid file accesses found in log")
 
-    return {
-        "tiering": tiering,
-        "heatmap": "/api/heatmap"
-    }
+        # Generate tiering advice
+        result = generate_tiering_suggestions(llm, access_counts)
+
+        return JSONResponse(content=result)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)

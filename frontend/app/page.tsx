@@ -84,19 +84,33 @@ export default function TierSense() {
   const [results, setResults] = useState<typeof mockResults | null>(null)
   const [showSettings, setShowSettings] = useState(false)
 
-  // Update the handleRunAnalysis function to include recommendations
   const handleRunAnalysis = async () => {
-    setIsAnalyzing(true)
-    // Simulate API call
-    setTimeout(() => {
-      setResults({
-        ...mockResults,
-        // recommendations: mockRecommendations,
-      })
-      setIsAnalyzing(false)
-    }, 2000)
-  }
+  try {
+    const formData = new FormData()
+    formData.append("llm", selectedLLM)
+    formData.append("api_key", apiKey)
+    if (uploadedFile) {
+      formData.append("file", uploadedFile)
+    }
 
+    const response = await fetch("http://34.234.87.251:8000/api/run-tiering", {
+      method: "POST", // ✅ important
+      body: formData,
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${await response.text()}`)
+    }
+
+    const result = await response.json()
+    setResults(result)
+  } catch (error) {
+    console.error("Failed to fetch:", error)
+    // alert("Run failed: " + error.message)
+  }
+}
+
+  
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file && file.name.endsWith(".ndjson")) {
