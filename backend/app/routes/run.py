@@ -1,25 +1,23 @@
 from fastapi import APIRouter, Query
-from app.core import parser, heatmap, llm_factory
-from app.config import LOG_DIR, DEFAULT_LLM, SUPPORTED_LLMS
+from app.core.parser import parse_logs
+from app.core.heatmap import generate_heatmap
+from app.core.llm_factory import generate_tiering_suggestions as get_llm_response
+import os
 
 router = APIRouter()
 
 @router.get("/run-tiering")
-def run_tiering(llm: str = Query(default=DEFAULT_LLM)):
-    llm = llm.lower()
-    if llm not in SUPPORTED_LLMS:
-        return {"error": f"LLM '{llm}' not supported. Choose from: {SUPPORTED_LLMS}"}
-
-    access_counts, _ = parser.parse_logs(LOG_DIR)
+def run_tiering(llm: str = Query("gemini")):
+    log_dir = os.getenv("LOG_DIR", "/mnt/nfs-logs")
+    access_counts, access_times = parse_logs(log_dir)
 
     if not access_counts:
-        return {"error": "No valid log data found for tiering."}
+        return {"error": "No access data found."}
 
-    heatmap.generate_heatmap(access_counts)
-    result = llm_factory.generate_tiering_suggestions(llm, access_counts)
+    generate_heatmap(access_counts)
+    tiering = get_llm_response(llm, access_counts)
 
     return {
-        "llm": llm,
-        "tiering": result,
-        "heatmap_path": f"/api/heatmap"  # exposed separately if needed
+        "tiering": tiering,
+        "heatmap": "/api/heatmap"
     }

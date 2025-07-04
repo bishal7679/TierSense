@@ -6,10 +6,14 @@ from collections import defaultdict
 # Regex to extract relevant file paths under /mnt/data
 DATA_PATH_PATTERN = re.compile(r'name=(?:\\?"|")?(/mnt/data/[^"\\\s]+)')
 
-def parse_logs(log_dir):
+def parse_logs(log_dir=None):
     access_counts = defaultdict(int)
     access_times = defaultdict(list)
     total_good, total_bad = 0, 0
+
+    # ✅ Get log_dir from env if not passed
+    if not log_dir:
+        log_dir = os.getenv("LOG_DIR", "/mnt/nfs-logs")
 
     if not os.path.exists(log_dir):
         print(f"❌ Log directory does not exist: {log_dir}")
