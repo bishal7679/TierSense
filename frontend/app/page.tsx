@@ -94,10 +94,8 @@ export default function TierSense() {
     throw new Error("Please select and upload a valid .ndjson file.")
   }
   formData.append("file", uploadedFile)
-} else {
-  // Fallback to dummy file to satisfy required field
-  formData.append("file", new Blob([], { type: "application/x-ndjson" }), "empty.ndjson")
 }
+
 
     const response = await fetch("http://100.24.37.54:8000/api/run-tiering", {
       method: "POST", 
