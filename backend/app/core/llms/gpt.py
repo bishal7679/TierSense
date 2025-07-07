@@ -48,7 +48,7 @@ def generate(access_counts: dict) -> str:
     }
 
     payload = {
-        "model": "openai/gpt-3.5-turbo",  # ✅ You can also test: "mistralai/mistral-7b-instruct:free"
+        "model": "mistralai/mistral-7b-instruct:free", 
         "messages": [
             {"role": "user", "content": prompt}
         ]
