@@ -30,6 +30,7 @@
 import os
 import json
 import requests
+import re
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
@@ -42,12 +43,12 @@ def generate(access_counts: dict) -> str:
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://your-project-site.com",  # Optional, for OpenRouter tracking
+        "HTTP-Referer": "https://your-project-site.com",  # Optional, for OpenRouter analytics
         "X-Title": "TierSense"
     }
 
     payload = {
-        "model": "openai/gpt-3.5-turbo",  # You can switch this to any supported OpenRouter model
+        "model": "openai/gpt-3.5-turbo",  # ✅ Replace this later with "mistralai/mistral-7b-instruct:free" for free GPT
         "messages": [
             {"role": "user", "content": prompt}
         ]
@@ -60,7 +61,8 @@ def generate(access_counts: dict) -> str:
         data = response.json()
         raw = data["choices"][0]["message"]["content"]
 
-        print("🔍 Raw LLM response:", repr(raw))  # Useful for debugging
+        print("🔍 Raw LLM response >>>")
+        print(repr(raw))
 
         return _extract_json(raw)
 
@@ -71,29 +73,29 @@ def generate(access_counts: dict) -> str:
     except Exception as e:
         return f"Unexpected error: {e}"
 
-
 def _build_prompt(access_counts: dict) -> str:
     prompt = (
-    "Classify file paths into storage tiers based on access frequency:\n"
-    "- HOT: Frequently accessed\n"
-    "- WARM: Occasionally accessed\n"
-    "- COLD: Rarely accessed\n"
-    "Respond **only with a JSON object**. Do not include any explanation.\n"
-    "Example:\n"
-    "{\n  \"/mnt/file1.txt\": \"HOT\",\n  \"/mnt/oldfile.txt\": \"COLD\" }\n\n"
-    "Input:\n"
-)
+        "You are a tiering assistant.\n"
+        "Classify each file path based on how frequently it was accessed:\n"
+        "- HOT: Frequently accessed\n"
+        "- WARM: Occasionally accessed\n"
+        "- COLD: Rarely accessed\n"
+        "Respond with ONLY a JSON object. Do not include explanation or markdown.\n"
+        "Example:\n"
+        "{\n  \"/mnt/file1.txt\": \"HOT\",\n  \"/mnt/oldfile.txt\": \"COLD\"\n}\n\n"
+        "Input:\n"
+    )
     for path, count in sorted(access_counts.items(), key=lambda x: -x[1]):
         prompt += f"{path}: {count}\n"
     return prompt
 
 def _extract_json(raw: str) -> str:
-    print("🔍 RAW LLM RESPONSE >>>")
-    print(repr(raw))  # This prints exact formatting
+    # ✅ Clean markdown-style output like ```json ... ```
+    cleaned = re.sub(r"```(?:json)?\s*([\s\S]*?)\s*```", r"\1", raw).strip()
+
     try:
-        if raw.strip().startswith("```"):
-            raw = raw.strip().strip("```json").strip("```").strip()
-        parsed = json.loads(raw)
+        parsed = json.loads(cleaned)
         return json.dumps(parsed, indent=2)
     except json.JSONDecodeError as e:
         raise ValueError(f"LLM did not return valid JSON: {e}")
+

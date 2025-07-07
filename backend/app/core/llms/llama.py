@@ -1,7 +1,9 @@
-import requests
+import os
 import json
+import requests
+import re
 
-OLLAMA_API_URL = "http://localhost:11434/api/generate"
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 def generate(access_counts: dict) -> str:
     if not access_counts:
@@ -9,22 +11,56 @@ def generate(access_counts: dict) -> str:
 
     prompt = _build_prompt(access_counts)
 
-    try:
-        response = requests.post(
-            OLLAMA_API_URL,
-            json={"model": "llama3", "prompt": prompt, "stream": False}
-        )
-        if response.status_code == 200:
-            return response.json()["response"].strip()
-        return f"Ollama error: {response.text}"
-    except Exception as e:
-        return f"Ollama request failed: {e}"
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://your-project-site.com",
+        "X-Title": "TierSense"
+    }
 
-def _build_prompt(access_counts):
+    payload = {
+        "model": "meta-llama/llama-3-8b-instruct:free",  # ✅ Free model on OpenRouter
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    }
+
+    try:
+        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        raw = data["choices"][0]["message"]["content"]
+
+        print("🔍 LLaMA LLM response:")
+        print(repr(raw))
+
+        return _extract_json(raw)
+
+    except requests.RequestException as req_err:
+        return f"LLaMA API error (HTTP): {req_err}"
+    except ValueError as parse_err:
+        return f"LLaMA response parsing error: {parse_err}"
+    except Exception as e:
+        return f"LLaMA unexpected error: {e}"
+
+def _build_prompt(access_counts: dict) -> str:
     prompt = (
-        "Classify paths into HOT, WARM, or COLD tiers based on access frequency.\n"
-        "Respond only with valid JSON.\n\n"
+        "You're a file tiering engine. Classify file paths into storage tiers:\n"
+        "- HOT: Frequently accessed\n"
+        "- WARM: Occasionally accessed\n"
+        "- COLD: Rarely accessed\n\n"
+        "Respond only in valid JSON format like:\n"
+        "{\n  \"/mnt/file.txt\": \"HOT\",\n  \"/mnt/archive/file.txt\": \"COLD\"\n}\n\n"
+        "Access data:\n"
     )
     for path, count in sorted(access_counts.items(), key=lambda x: -x[1]):
         prompt += f"{path}: {count}\n"
     return prompt
+
+def _extract_json(raw: str) -> str:
+    cleaned = re.sub(r"```(?:json)?\s*([\s\S]*?)\s*```", r"\1", raw).strip()
+    try:
+        parsed = json.loads(cleaned)
+        return json.dumps(parsed, indent=2)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"LLM did not return valid JSON: {e}")
