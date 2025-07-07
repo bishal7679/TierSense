@@ -29,10 +29,9 @@
 
 import os
 import json
-import re
-import openai
+import requests
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 def generate(access_counts: dict) -> str:
     if not access_counts:
@@ -40,44 +39,50 @@ def generate(access_counts: dict) -> str:
 
     prompt = _build_prompt(access_counts)
 
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://your-project-site.com",  # Optional, but good practice
+        "X-Title": "TierSense"
+    }
+
+    payload = {
+        "model": "openai/gpt-3.5-turbo",  # or another model like "mistralai/mixtral-8x7b"
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    }
+
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        raw = response["choices"][0]["message"]["content"]
-        print("🔍 Raw GPT Response:\n", raw)  # Debug log
-
-        cleaned = _extract_json(raw)
-        return json.dumps(cleaned, indent=2)  # Always return valid JSON string
-
+        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        raw = data["choices"][0]["message"]["content"]
+        print("🔍 Raw LLM response:", repr(raw))
+        return _extract_json(raw)
     except Exception as e:
-        return f"OpenAI GPT error: {e}"
+        return f"LLM API error: {e}"
 
 def _build_prompt(access_counts):
     prompt = (
-        "You are a system that classifies file paths based on access frequency.\n"
-        "Classify each path into one of the following tiers:\n"
+        "Classify file paths into storage tiers based on access frequency:\n"
         "- HOT: Frequently accessed\n"
-        "- WARM: Moderately accessed\n"
-        "- COLD: Rarely accessed\n\n"
-        "Respond ONLY in raw JSON format like this:\n"
-        "{\n  \"/mnt/data/file1\": \"HOT\",\n  \"/mnt/data/file2\": \"COLD\"\n}\n"
-        "Do NOT include any explanations, markdown, or extra text.\n\n"
-        "Here is the data:\n"
+        "- WARM: Occasionally accessed\n"
+        "- COLD: Rarely accessed\n"
+        "Respond in pure JSON format only. Example:\n"
+        "{\n  \"/mnt/file.txt\": \"HOT\",\n  \"/mnt/oldfile.txt\": \"COLD\"\n}\n\n"
+        "Here is the input:\n"
     )
     for path, count in sorted(access_counts.items(), key=lambda x: -x[1]):
         prompt += f"{path}: {count}\n"
     return prompt
 
-def _extract_json(raw: str) -> dict:
-    if not raw or raw.strip() == "":
-        raise ValueError("Empty response received from GPT")
-
-    # Remove markdown-style triple backtick blocks
-    cleaned = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE | re.IGNORECASE).strip()
-
+def _extract_json(raw: str) -> str:
     try:
-        return json.loads(cleaned)
+        # Clean markdown
+        if raw.strip().startswith("```"):
+            raw = raw.strip().strip("```json").strip("```").strip()
+        parsed = json.loads(raw)
+        return json.dumps(parsed, indent=2)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse JSON: {e}\nRaw content:\n{cleaned}")
+        raise ValueError(f"LLM did not return valid JSON: {e}")

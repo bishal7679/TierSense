@@ -26,7 +26,7 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
 
     if llm_type == "gemini":
         raw_output = gemini.generate(access_counts)
-    elif llm_type in ["gpt", "openai"]:
+    elif llm_type in ["gpt", "openai", "openrouter"]:
         raw_output = gpt.generate(access_counts)
     elif llm_type == "claude":
         raw_output = claude.generate(access_counts)
