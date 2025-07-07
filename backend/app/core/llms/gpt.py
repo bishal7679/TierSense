@@ -74,25 +74,22 @@ def generate(access_counts: dict) -> str:
 
 def _build_prompt(access_counts: dict) -> str:
     prompt = (
-        "You're a smart storage optimization agent.\n"
-        "Classify each file path as one of the following based on access frequency:\n"
-        "- HOT (frequently accessed)\n"
-        "- WARM (moderately accessed)\n"
-        "- COLD (rarely accessed)\n"
-        "Respond ONLY in valid JSON like this:\n"
-        "{\n"
-        "  \"/mnt/data/recent.txt\": \"HOT\",\n"
-        "  \"/mnt/data/logs/old.log\": \"COLD\"\n"
-        "}\n\n"
-        "Access data:\n"
-    )
+    "Classify file paths into storage tiers based on access frequency:\n"
+    "- HOT: Frequently accessed\n"
+    "- WARM: Occasionally accessed\n"
+    "- COLD: Rarely accessed\n"
+    "Respond **only with a JSON object**. Do not include any explanation.\n"
+    "Example:\n"
+    "{\n  \"/mnt/file1.txt\": \"HOT\",\n  \"/mnt/oldfile.txt\": \"COLD\" }\n\n"
+    "Input:\n"
+)
     for path, count in sorted(access_counts.items(), key=lambda x: -x[1]):
         prompt += f"{path}: {count}\n"
     return prompt
 
-
 def _extract_json(raw: str) -> str:
-    print("📦 Raw LLM Output Before JSON Parse:\n", repr(raw))  # Debug print
+    print("🔍 RAW LLM RESPONSE >>>")
+    print(repr(raw))  # This prints exact formatting
     try:
         if raw.strip().startswith("```"):
             raw = raw.strip().strip("```json").strip("```").strip()
