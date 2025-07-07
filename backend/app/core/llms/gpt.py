@@ -86,13 +86,13 @@ def _build_prompt(access_counts: dict) -> str:
         prompt += f"{path}: {count}\n"
     return prompt
 
-
 def _extract_json(raw: str) -> str:
-    # ✅ Write raw output to file for inspection
-    with open("/tmp/llm_raw_output.log", "w") as f:
-        f.write(raw)
+    try:
+        with open("/home/ubuntu/llm_raw_output.log", "w") as f:
+            f.write(raw)
+    except Exception as e:
+        print(f"⚠️ Failed to write raw output: {e}")
 
-    # ✅ Remove ```json ... ``` if exists
     cleaned = re.sub(r"```(?:json)?\s*([\s\S]*?)\s*```", r"\1", raw).strip()
 
     try:
