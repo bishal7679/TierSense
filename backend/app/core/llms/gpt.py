@@ -92,15 +92,11 @@ def _build_prompt(access_counts: dict) -> str:
 
 
 def _extract_json(raw: str) -> str:
+    print("📦 Raw LLM Output Before JSON Parse:\n", repr(raw))  # Debug print
     try:
-        # Remove surrounding ```json ... ``` or ``` ... ```
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = re.sub(r"```(?:json)?\n?", "", cleaned)
-            cleaned = cleaned.strip("`").strip()
-
-        parsed = json.loads(cleaned)
+        if raw.strip().startswith("```"):
+            raw = raw.strip().strip("```json").strip("```").strip()
+        parsed = json.loads(raw)
         return json.dumps(parsed, indent=2)
-
     except json.JSONDecodeError as e:
         raise ValueError(f"LLM did not return valid JSON: {e}")

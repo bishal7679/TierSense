@@ -20,7 +20,7 @@
 import json
 import re
 from app.core.llms import gemini, gpt, claude, copilot, llama, deepseek
-from backend.app.core.llms import llama
+from app.core.llms import llama
 
 LLM_DISPATCH = {
     "gemini": gemini.generate,
