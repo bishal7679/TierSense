@@ -19,7 +19,7 @@ def generate(access_counts: dict) -> str:
     }
 
     payload = {
-        "model": "meta-llama/llama-3-8b-instruct:free",  # ✅ Free model on OpenRouter
+        "model": "meta-llama/llama-3-8b-instruct:free",  # ✅ Free model
         "messages": [
             {"role": "user", "content": prompt}
         ]
@@ -29,11 +29,13 @@ def generate(access_counts: dict) -> str:
         response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
         response.raise_for_status()
         data = response.json()
+
+        if "choices" not in data or not data["choices"]:
+            return f"⚠️ OpenRouter returned invalid structure: {data}"
+
         raw = data["choices"][0]["message"]["content"]
 
-        print("🔍 LLaMA LLM response:")
-        print(repr(raw))
-
+        print("🔍 LLaMA raw response (first 100 chars):", repr(raw[:100]))  # Preview
         return _extract_json(raw)
 
     except requests.RequestException as req_err:
@@ -43,22 +45,35 @@ def generate(access_counts: dict) -> str:
     except Exception as e:
         return f"LLaMA unexpected error: {e}"
 
+
 def _build_prompt(access_counts: dict) -> str:
     prompt = (
-        "You're a file tiering engine. Classify file paths into storage tiers:\n"
+        "You are a file tiering assistant.\n"
+        "Classify each file path into one of these tiers based on frequency:\n"
         "- HOT: Frequently accessed\n"
         "- WARM: Occasionally accessed\n"
         "- COLD: Rarely accessed\n\n"
-        "Respond only in valid JSON format like:\n"
-        "{\n  \"/mnt/file.txt\": \"HOT\",\n  \"/mnt/archive/file.txt\": \"COLD\"\n}\n\n"
-        "Access data:\n"
+        "**Important**: Return ONLY valid JSON. No comments. No markdown. No explanation.\n"
+        "Example:\n"
+        "{\n  \"/mnt/data/file1.txt\": \"HOT\",\n  \"/mnt/data/file2.txt\": \"COLD\"\n}\n\n"
+        "Now classify the following:\n"
     )
     for path, count in sorted(access_counts.items(), key=lambda x: -x[1]):
         prompt += f"{path}: {count}\n"
     return prompt
 
+
 def _extract_json(raw: str) -> str:
+    # ✅ Save raw output to file for debug inspection
+    try:
+        with open("/home/ubuntu/llm_raw_output.log", "w") as f:
+            f.write(raw)
+    except Exception as log_err:
+        print(f"⚠️ Failed to write raw output to log: {log_err}")
+
+    # ✅ Strip markdown-style ```json``` if present
     cleaned = re.sub(r"```(?:json)?\s*([\s\S]*?)\s*```", r"\1", raw).strip()
+
     try:
         parsed = json.loads(cleaned)
         return json.dumps(parsed, indent=2)
