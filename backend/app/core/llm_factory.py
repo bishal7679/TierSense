@@ -19,7 +19,8 @@
 
 import json
 import re
-from app.core.llms import gemini, gpt, claude, ollama, copilot, llama, deepseek
+from app.core.llms import gemini, gpt, claude, copilot, llama, deepseek
+from backend.app.core.llms import llama
 
 LLM_DISPATCH = {
     "gemini": gemini.generate,
@@ -27,7 +28,7 @@ LLM_DISPATCH = {
     "openai": gpt.generate,           # alias
     "openrouter": gpt.generate,       # alias
     "claude": claude.generate,
-    "ollama": ollama.generate,
+    "ollama": llama.generate,
     "copilot": copilot.generate,
     "llama": llama.generate,
     "deepseek": deepseek.generate,
