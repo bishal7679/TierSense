@@ -19,29 +19,33 @@
 
 import json
 import re
-from app.core.llms import gemini, gpt, claude, ollama, copilot
+from app.core.llms import gemini, gpt, claude, ollama, copilot, llama, deepseek
+
+LLM_DISPATCH = {
+    "gemini": gemini.generate,
+    "gpt": gpt.generate,
+    "openai": gpt.generate,           # alias
+    "openrouter": gpt.generate,       # alias
+    "claude": claude.generate,
+    "ollama": ollama.generate,
+    "copilot": copilot.generate,
+    "llama": llama.generate,
+    "deepseek": deepseek.generate,
+}
 
 def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
     llm_type = llm_type.lower()
 
-    if llm_type == "gemini":
-        raw_output = gemini.generate(access_counts)
-    elif llm_type in ["gpt", "openai", "openrouter"]:
-        raw_output = gpt.generate(access_counts)
-    elif llm_type == "claude":
-        raw_output = claude.generate(access_counts)
-    elif llm_type == "ollama":
-        raw_output = ollama.generate(access_counts)
-    elif llm_type == "copilot":
-        raw_output = copilot.generate(access_counts)
-    else:
+    if llm_type not in LLM_DISPATCH:
         raise ValueError(f"Unsupported LLM type: {llm_type}")
 
+    raw_output = LLM_DISPATCH[llm_type](access_counts)
+
     try:
-        # 🔧 Clean markdown-like formatting (```json ... ```)
+        # Clean markdown/code fences like ```json ... ```
         cleaned_output = re.sub(r"```(?:json)?\n?(.*?)```", r"\1", raw_output, flags=re.DOTALL).strip()
 
-        # 🧪 Attempt to parse as JSON
+        # Parse the JSON output
         parsed = json.loads(cleaned_output)
 
         summary = {"total_files": 0, "hot_tier": 0, "warm_tier": 0, "cold_tier": 0}
@@ -60,8 +64,8 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
             analysis.append({
                 "path": path,
                 "tier": tier_upper,
-                "score": 0.0,  # Placeholder if no scoring logic
-                "access_frequency": "unknown"  # Optional enhancement
+                "score": 0.0,                  # optional placeholder
+                "access_frequency": "unknown"  # optional for now
             })
 
         return {"summary": summary, "analysis": analysis}
