@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SettingsIcon } from "lucide-react"
 import ApiService from "../services/api"
+import { llmOptions } from "@/config/llmOptions"
+
 
 const Settings = ({ onSettingsChange }) => {
   const [isOpen, setIsOpen] = useState(false)
@@ -70,15 +72,17 @@ const Settings = ({ onSettingsChange }) => {
             <Label htmlFor="llm-provider">LLM Provider</Label>
             <Select value={settings.llm_provider} onValueChange={(value) => handleInputChange("llm_provider", value)}>
               <SelectTrigger>
-                <SelectValue placeholder="Select LLM provider" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="openai">OpenAI</SelectItem>
-                <SelectItem value="gemini">Google Gemini</SelectItem>
-              </SelectContent>
-            </Select>
+                <SelectValue placeholder="Choose Model" />
+            </SelectTrigger>
+            <SelectContent>
+              {llmOptions.map(opt => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+              </Select>
           </div>
-
           <div>
             <Label htmlFor="api-key">API Key</Label>
             <Input
