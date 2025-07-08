@@ -2,7 +2,7 @@ import os
 import json
 import requests
 import re
-from app.core.llms.shared_prompt import build_prompt  # Import shared logic
+from app.core.llms.shared_prompt import build_prompt  # Shared strict prompt
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
@@ -10,7 +10,7 @@ def generate(access_counts: dict) -> str:
     if not access_counts:
         return "No access data provided."
 
-    prompt = build_prompt(access_counts)  # Use shared prompt
+    prompt = build_prompt(access_counts)
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -19,38 +19,42 @@ def generate(access_counts: dict) -> str:
     }
 
     payload = {
-        "model": "mistralai/mistral-7b-instruct:free",
+        "model": "mistralai/mistral-7b-instruct:free",  # or openai/gpt-3.5-turbo etc.
         "messages": [{"role": "user", "content": prompt}]
     }
 
     try:
         response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-
-        if response.status_code != 200:
-            return f"OpenRouter API error: {response.status_code} - {response.text}"
+        response.raise_for_status()
 
         data = response.json()
-        raw = data["choices"][0]["message"]["content"]
+        if not data.get("choices") or "message" not in data["choices"][0]:
+            raise ValueError("Empty or malformed LLM response")
+
+        raw = data["choices"][0]["message"]["content"].strip()
+
+        # Save raw output for inspection
+        with open("/home/deepayan/llm_raw_output.log", "w") as f:
+            f.write(raw)
 
         return _extract_json(raw)
 
-    except requests.RequestException as req_err:
-        return f"LLM API error (HTTP): {req_err}"
-    except ValueError as parse_err:
-        return f"LLM response parsing error: {parse_err}"
     except Exception as e:
-        return f"Unexpected error: {e}"
+        return f"LLM error: {e}"
 
 
 def _extract_json(raw: str) -> str:
-    try:
-        with open("/home/deepayan/llm_raw_output.log", "w") as f:
-            f.write(raw)
-    except Exception as e:
-        print(f"Failed to write raw output: {e}")
-
-    # Strip markdown/code block wrappers
+    """
+    Cleans and parses JSON from LLM response that might include markdown fences or extra text.
+    """
+    # Strip common markdown formatting
     cleaned = re.sub(r"```(?:json)?\s*([\s\S]*?)\s*```", r"\1", raw).strip()
+
+    # Attempt to find only JSON-like structure in case of extra wrapping
+    json_start = cleaned.find('{')
+    json_end = cleaned.rfind('}')
+    if json_start != -1 and json_end != -1:
+        cleaned = cleaned[json_start:json_end+1]
 
     try:
         parsed = json.loads(cleaned)
