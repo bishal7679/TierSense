@@ -19,7 +19,7 @@ def generate(access_counts: dict) -> str:
     }
 
     payload = {
-        "model": "anthropic/claude-3-sonnet:free",
+        "model": "anthropic/claude-sonnet-4",
         "messages": [
             {"role": "user", "content": prompt}
         ]
