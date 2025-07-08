@@ -1,5 +1,4 @@
 import os
-import json
 import re
 from collections import defaultdict
 
@@ -15,7 +14,7 @@ def parse_logs(log_dir=None):
         print(f"Log directory does not exist: {log_dir}")
         return {}, {}
 
-    last_known_cwd = ""  # 🔧 Track most recent cwd globally
+    last_known_cwd = ""  # Track most recent cwd globally
 
     for filename in sorted(os.listdir(log_dir)):
         if not filename.endswith(".ndjson"):
@@ -28,13 +27,13 @@ def parse_logs(log_dir=None):
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
                 try:
-                    # 🔍 Extract CWD from "type=CWD"
+                    # Extract CWD from "type=CWD"
                     if 'type=CWD' in line and 'cwd="' in line:
                         match = re.search(r'cwd="([^"]+)"', line)
                         if match:
                             last_known_cwd = match.group(1)
 
-                    # 🔍 Extract file path from "type=PATH"
+                    # Extract file path from "type=PATH"
                     elif 'type=PATH' in line and 'name=' in line:
                         name_match = re.search(r'name="([^"]+)"', line)
                         if not name_match:
@@ -47,7 +46,7 @@ def parse_logs(log_dir=None):
                             access_counts[full_path] += 1
                             access_times[full_path].append("")  # Placeholder if you want timestamps later
                             good += 1
-                    # ✅ If not CWD or PATH, ignore (don’t count as bad)
+                    # If not CWD or PATH, ignore (don’t count as bad)
                 except Exception as e:
                     print(f"❌ Error parsing line: {e}")
                     bad += 1
