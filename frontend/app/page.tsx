@@ -452,7 +452,7 @@ export default function TierSense() {
                   </CardHeader>
                   <CardContent className="text-center">
                     <img
-                      src={`http://10.14.220.29:8000/heatmap?ts=${Date.now()}`}
+                      src={`http://10.14.220.29:8000/api/heatmap?ts=${Date.now()}`}
                       alt="Heatmap"
                       className="mx-auto rounded border border-gray-300"
                       style={{ maxHeight: "500px", objectFit: "contain" }}
