@@ -1,4 +1,4 @@
-def _build_prompt(access_counts: dict) -> str:
+def build_prompt(access_counts: dict) -> str:
     prompt = (
         "You are a storage tiering engine.\n"
         "Your job is to classify file paths into one of the following storage tiers based strictly on access frequency:\n"
