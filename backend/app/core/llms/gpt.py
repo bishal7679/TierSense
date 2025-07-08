@@ -43,7 +43,7 @@ def generate(access_counts: dict) -> str:
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://your-project-site.com",  # Optional
+        #"HTTP-Referer": "https://your-project-site.com",
         "X-Title": "TierSense"
     }
 
@@ -91,7 +91,7 @@ def _extract_json(raw: str) -> str:
         with open("/home/ubuntu/llm_raw_output.log", "w") as f:
             f.write(raw)
     except Exception as e:
-        print(f"⚠️ Failed to write raw output: {e}")
+        print(f"Failed to write raw output: {e}")
 
     cleaned = re.sub(r"```(?:json)?\s*([\s\S]*?)\s*```", r"\1", raw).strip()
 

@@ -34,7 +34,6 @@ def generate(access_counts: dict) -> str:
     if not access_counts:
         return "No access data provided."
 
-    # Re-configure Gemini with the correct API key at runtime
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return "Gemini API error: Missing GEMINI_API_KEY environment variable."

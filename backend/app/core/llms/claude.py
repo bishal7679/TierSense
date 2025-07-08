@@ -14,12 +14,12 @@ def generate(access_counts: dict) -> str:
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://your-project-site.com",
+        # "HTTP-Referer": "https://your-project-site.com",
         "X-Title": "TierSense"
     }
 
     payload = {
-        "model": "anthropic/claude-3-sonnet:free",  # ✅ Use Claude 3 free-tier via OpenRouter
+        "model": "anthropic/claude-3-sonnet:free",  
         "messages": [
             {"role": "user", "content": prompt}
         ]
@@ -31,7 +31,7 @@ def generate(access_counts: dict) -> str:
         data = response.json()
         raw = data["choices"][0]["message"]["content"]
 
-        print("🔍 Claude LLM response:")
+        print("Claude LLM response:")
         print(repr(raw))
 
         return _extract_json(raw)

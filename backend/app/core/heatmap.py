@@ -3,7 +3,7 @@ from app.config import HEATMAP_PATH
 
 def generate_heatmap(access_counts):
     if not access_counts:
-        print("❌ No data to generate heatmap.")
+        print("No data to generate heatmap.")
         return
 
     files = list(access_counts.keys())
@@ -15,4 +15,4 @@ def generate_heatmap(access_counts):
     ax.set_title("File Access Heatmap (/mnt/data/*)")
     plt.tight_layout()
     plt.savefig(HEATMAP_PATH)
-    print(f"📷 Heatmap saved to: {HEATMAP_PATH}")
+    print(f"Heatmap saved to: {HEATMAP_PATH}")

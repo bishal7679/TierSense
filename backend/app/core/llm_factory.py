@@ -59,7 +59,7 @@
 
 import json
 import re
-from app.core.llms import gemini, gpt, claude, copilot, llama, deepseek
+from app.core.llms import gemini, gpt, claude, llama, deepseek
 from app.core.parser import apply_rule_based_tiering
 
 LLM_DISPATCH = {
@@ -76,7 +76,7 @@ LLM_DISPATCH = {
 def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
     llm_type = llm_type.lower()
 
-    # ✅ Option to skip LLM and use rule-based logic only
+    # Option to skip LLM and use rule-based logic only
     if llm_type == "rule":
         return _build_result_from_dict(apply_rule_based_tiering(access_counts))
 
@@ -86,17 +86,17 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
     raw_output = LLM_DISPATCH[llm_type](access_counts)
 
     try:
-        # ✅ Clean markdown-style JSON like ```json ... ```
+        # Clean markdown-style JSON like ```json ... ```
         cleaned_output = re.sub(r"```(?:json)?\n?(.*?)```", r"\1", raw_output, flags=re.DOTALL).strip()
 
         parsed = json.loads(cleaned_output)
         return _build_result_from_dict(parsed)
 
     except Exception as e:
-        print(f"⚠️ LLM parsing failed: {e} — Falling back to rule-based logic")
+        print(f"LLM parsing failed: {e} — Falling back to rule-based logic")
         return _build_result_from_dict(apply_rule_based_tiering(access_counts))
 
-# 🔧 Shared formatter for both LLM and rule-based responses
+# Shared formatter for both LLM and rule-based responses
 def _build_result_from_dict(tiered: dict) -> dict:
     summary = {"total_files": 0, "hot_tier": 0, "warm_tier": 0, "cold_tier": 0}
     analysis = []

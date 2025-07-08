@@ -89,7 +89,7 @@ def parse_logs(log_dir=None):
             continue
 
         path = os.path.join(log_dir, filename)
-        print(f"📄 Processing file: {path}")
+        print(f"Processing file: {path}")
         good, bad = 0, 0
 
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
@@ -118,14 +118,14 @@ def parse_logs(log_dir=None):
                         bad += 1
 
                 except Exception as e:
-                    print(f"❌ Error: {e}")
+                    print(f"Error: {e}")
                     bad += 1
 
         total_good += good
         total_bad += bad
-        print(f"✅ Parsed {good} good entries, ⚠️ Skipped {bad} bad entries.")
+        print(f"Parsed {good} good entries, ⚠️ Skipped {bad} bad entries.")
 
-    print(f"\n📊 Found {len(access_counts)} unique paths. Total good: {total_good}, bad: {total_bad}")
+    print(f"\nFound {len(access_counts)} unique paths. Total good: {total_good}, bad: {total_bad}")
     return access_counts, access_times
 
 def extract_event_id(line):

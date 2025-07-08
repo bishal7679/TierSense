@@ -19,7 +19,7 @@ def generate(access_counts: dict) -> str:
     }
 
     payload = {
-        "model": "meta-llama/llama-3-8b-instruct:free",  # ✅ Free model
+        "model": "meta-llama/llama-3-8b-instruct:free", 
         "messages": [
             {"role": "user", "content": prompt}
         ]
@@ -31,11 +31,11 @@ def generate(access_counts: dict) -> str:
         data = response.json()
 
         if "choices" not in data or not data["choices"]:
-            return f"⚠️ OpenRouter returned invalid structure: {data}"
+            return f"OpenRouter returned invalid structure: {data}"
 
         raw = data["choices"][0]["message"]["content"]
 
-        print("🔍 LLaMA raw response (first 100 chars):", repr(raw[:100]))  # Preview
+        print("LLaMA raw response (first 100 chars):", repr(raw[:100]))  # Preview
         return _extract_json(raw)
 
     except requests.RequestException as req_err:
@@ -64,14 +64,14 @@ def _build_prompt(access_counts: dict) -> str:
 
 
 def _extract_json(raw: str) -> str:
-    # ✅ Save raw output to file for debug inspection
+    # Save raw output to file for debug inspection
     try:
         with open("/home/ubuntu/llm_raw_output.log", "w") as f:
             f.write(raw)
     except Exception as log_err:
         print(f"⚠️ Failed to write raw output to log: {log_err}")
 
-    # ✅ Strip markdown-style ```json``` if present
+    # Strip markdown-style ```json``` if present
     cleaned = re.sub(r"```(?:json)?\s*([\s\S]*?)\s*```", r"\1", raw).strip()
 
     try:

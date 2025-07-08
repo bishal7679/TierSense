@@ -13,12 +13,12 @@ def generate(access_counts: dict) -> str:
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://your-project-site.com",  # Optional but recommended
+        # "HTTP-Referer": "https://your-project-site.com", 
         "X-Title": "TierSense"
     }
 
     payload = {
-        "model": "deepseek/deepseek-r1-0528-qwen3-8b:free",  # ✅ FREE DeepSeek model
+        "model": "deepseek/deepseek-r1-0528-qwen3-8b:free", 
         "messages": [{"role": "user", "content": prompt}]
     }
 
