@@ -10,7 +10,7 @@ def generate_heatmap(access_counts):
     counts = list(access_counts.values())
 
     fig, ax = plt.subplots(figsize=(10, len(files) * 0.4 + 1))
-    ax.barh(files, counts, color='deepskyblue')
+    ax.barh(files, counts, color='blue')
     ax.set_xlabel("Access Frequency")
     ax.set_title("File Access Heatmap (/mnt/data/*)")
     plt.tight_layout()
