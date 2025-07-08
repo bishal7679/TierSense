@@ -2,6 +2,7 @@ import os
 import json
 import requests
 import re
+from app.core.llms.shared_prompt import build_prompt  # Central rule-based logic
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
@@ -9,7 +10,7 @@ def generate(access_counts: dict) -> str:
     if not access_counts:
         return "No access data provided."
 
-    prompt = _build_prompt(access_counts)
+    prompt = build_prompt(access_counts)  # Use shared rule-based prompt
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -19,10 +20,8 @@ def generate(access_counts: dict) -> str:
     }
 
     payload = {
-        "model": "meta-llama/llama-3-8b-instruct:free", 
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
+        "model": "meta-llama/llama-3-8b-instruct:free",
+        "messages": [{"role": "user", "content": prompt}]
     }
 
     try:
@@ -34,8 +33,8 @@ def generate(access_counts: dict) -> str:
             return f"OpenRouter returned invalid structure: {data}"
 
         raw = data["choices"][0]["message"]["content"]
+        print("LLaMA raw response (first 100 chars):", repr(raw[:100]))
 
-        print("LLaMA raw response (first 100 chars):", repr(raw[:100]))  # Preview
         return _extract_json(raw)
 
     except requests.RequestException as req_err:
@@ -46,32 +45,15 @@ def generate(access_counts: dict) -> str:
         return f"LLaMA unexpected error: {e}"
 
 
-def _build_prompt(access_counts: dict) -> str:
-    prompt = (
-        "You are a file tiering assistant.\n"
-        "Classify each file path into one of these tiers based on frequency:\n"
-        "- HOT: Frequently accessed\n"
-        "- WARM: Occasionally accessed\n"
-        "- COLD: Rarely accessed\n\n"
-        "**Important**: Return ONLY valid JSON. No comments. No markdown. No explanation.\n"
-        "Example:\n"
-        "{\n  \"/mnt/data/file1.txt\": \"HOT\",\n  \"/mnt/data/file2.txt\": \"COLD\"\n}\n\n"
-        "Now classify the following:\n"
-    )
-    for path, count in sorted(access_counts.items(), key=lambda x: -x[1]):
-        prompt += f"{path}: {count}\n"
-    return prompt
-
-
 def _extract_json(raw: str) -> str:
-    # Save raw output to file for debug inspection
+    # Save raw LLM output for debugging
     try:
         with open("/home/ubuntu/llm_raw_output.log", "w") as f:
             f.write(raw)
     except Exception as log_err:
         print(f"⚠️ Failed to write raw output to log: {log_err}")
 
-    # Strip markdown-style ```json``` if present
+    # Strip triple-backtick markdown code block
     cleaned = re.sub(r"```(?:json)?\s*([\s\S]*?)\s*```", r"\1", raw).strip()
 
     try:

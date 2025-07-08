@@ -1,36 +1,8 @@
-# import os
-# import openai
-
-# openai.api_key = os.getenv("OPENAI_API_KEY")
-
-# def generate(access_counts: dict) -> str:
-#     if not access_counts:
-#         return "No access data provided."
-
-#     prompt = _build_prompt(access_counts)
-#     try:
-#         response = openai.ChatCompletion.create(
-#             model="gpt-3.5-turbo",
-#             messages=[{"role": "user", "content": prompt}]
-#         )
-#         return response["choices"][0]["message"]["content"].strip()
-#     except Exception as e:
-#         return f"OpenAI GPT error: {e}"
-
-# def _build_prompt(access_counts):
-#     prompt = (
-#         "You're a storage optimization system.\n"
-#         "Classify paths as HOT/WARM/COLD based on access frequency.\n"
-#         "Return valid JSON.\n\n"
-#     )
-#     for path, count in sorted(access_counts.items(), key=lambda x: -x[1]):
-#         prompt += f"{path}: {count}\n"
-#     return prompt
-
 import os
 import json
 import requests
 import re
+from app.core.llms.shared_prompt import build_prompt  # Import shared logic
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
@@ -38,20 +10,17 @@ def generate(access_counts: dict) -> str:
     if not access_counts:
         return "No access data provided."
 
-    prompt = _build_prompt(access_counts)
+    prompt = build_prompt(access_counts)  # Use shared prompt
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        #"HTTP-Referer": "https://your-project-site.com",
         "X-Title": "TierSense"
     }
 
     payload = {
-        "model": "mistralai/mistral-7b-instruct:free", 
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
+        "model": "mistralai/mistral-7b-instruct:free",
+        "messages": [{"role": "user", "content": prompt}]
     }
 
     try:
@@ -73,19 +42,6 @@ def generate(access_counts: dict) -> str:
         return f"Unexpected error: {e}"
 
 
-def _build_prompt(access_counts: dict) -> str:
-    prompt = (
-        "You are a file access tiering assistant.\n"
-        "Classify each file path into one of the tiers: HOT (frequently accessed), WARM (moderately accessed), or COLD (rarely accessed).\n"
-        "Return ONLY a valid JSON object without any explanation, markdown, or formatting.\n"
-        "Example:\n"
-        "{\n  \"/mnt/data/file1.txt\": \"HOT\",\n  \"/mnt/data/oldfile.txt\": \"COLD\"\n}\n\n"
-        "Input:\n"
-    )
-    for path, count in sorted(access_counts.items(), key=lambda x: -x[1]):
-        prompt += f"{path}: {count}\n"
-    return prompt
-
 def _extract_json(raw: str) -> str:
     try:
         with open("/home/ubuntu/llm_raw_output.log", "w") as f:
@@ -93,6 +49,7 @@ def _extract_json(raw: str) -> str:
     except Exception as e:
         print(f"Failed to write raw output: {e}")
 
+    # Strip markdown/code block wrappers
     cleaned = re.sub(r"```(?:json)?\s*([\s\S]*?)\s*```", r"\1", raw).strip()
 
     try:
