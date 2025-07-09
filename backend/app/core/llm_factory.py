@@ -25,20 +25,22 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
     try:
         # Clean markdown/code fences like ```json ... ```
         cleaned_output = re.sub(r"```(?:json)?\n?(.*?)```", r"\1", raw_output, flags=re.DOTALL).strip()
-
-        # Parse the JSON output
         parsed = json.loads(cleaned_output)
 
-        # Normalize access_counts keys once
-        normalized_access_counts = {os.path.normpath(k): v for k, v in access_counts.items()}
+        # Normalize access_counts for consistent matching
+        normalized_counts = {
+            os.path.normpath(path): count
+            for path, count in access_counts.items()
+        }
 
         summary = {"total_files": 0, "hot_tier": 0, "warm_tier": 0, "cold_tier": 0}
         analysis = []
 
-        for path, tier in parsed.items():
+        for raw_path, tier in parsed.items():
+            norm_path = os.path.normpath(raw_path)
             tier_upper = tier.strip().upper()
-            summary["total_files"] += 1
 
+            summary["total_files"] += 1
             if tier_upper == "HOT":
                 summary["hot_tier"] += 1
             elif tier_upper == "WARM":
@@ -46,15 +48,13 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
             elif tier_upper == "COLD":
                 summary["cold_tier"] += 1
 
-            # ✅ Normalize path before matching
-            normalized_path = os.path.normpath(path)
-            frequency = normalized_access_counts.get(normalized_path, "unknown")
+            frequency = normalized_counts.get(norm_path, "unknown")
 
             analysis.append({
-                "path": path,
+                "path": raw_path,                   # keep original path as returned by LLM
                 "tier": tier_upper,
-                "score": 0.0,
-                "access_frequency": frequency
+                "score": 0.0,                       # Optional: score logic
+                "access_frequency": frequency       # now correctly looked up
             })
 
         return {"summary": summary, "analysis": analysis}
