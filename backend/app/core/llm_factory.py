@@ -14,15 +14,15 @@ LLM_DISPATCH = {
     "deepseek": deepseek.generate
 }
 
-def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
+def generate_tiering_suggestions(llm_type: str, access_counts: dict, api_key: str = None) -> dict:
     llm_type = llm_type.lower()
 
     if llm_type not in LLM_DISPATCH:
         raise ValueError(f"Unsupported LLM type: {llm_type}")
 
     try:
-        # 🔹 Get raw LLM response
-        raw_output = LLM_DISPATCH[llm_type](access_counts)
+        # Get raw LLM response
+        raw_output = LLM_DISPATCH[llm_type](access_counts, api_key)
 
         # Clean markdown/code blocks like ```json ... ```
         cleaned_output = re.sub(r"```(?:json)?\n?(.*?)```", r"\1", raw_output, flags=re.DOTALL).strip()

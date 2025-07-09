@@ -1,5 +1,4 @@
 # app/routes/run.py
-
 import os
 import tempfile
 from typing import Optional
@@ -12,14 +11,17 @@ from app.core.llm_factory import generate_tiering_suggestions
 from app.core.heatmap import generate_heatmap  
 
 router = APIRouter()
-
 @router.post("/run-tiering")
 async def run_tiering(
     llm: str = Form(...),
-    api_key: str = Form(...),
+    api_key: str = Form(None),
     file: Optional[UploadFile] = File(None)
 ):
     tmp_path = None
+
+    # Set the API key (UI > .env fallback)
+    if api_key:
+        os.environ["OPENROUTER_API_KEY"] = api_key
 
     try:
         if file:
@@ -35,7 +37,7 @@ async def run_tiering(
         if not access_counts:
             raise HTTPException(status_code=400, detail="No valid file accesses found in log")
 
-        generate_heatmap(access_counts)  
+        generate_heatmap(access_counts)
 
         result = generate_tiering_suggestions(llm, access_counts)
         return JSONResponse(content=result)

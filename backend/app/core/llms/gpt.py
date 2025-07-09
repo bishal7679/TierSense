@@ -4,16 +4,22 @@ import requests
 import re
 from app.core.llms.shared_prompt import build_prompt  # Shared strict prompt
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+# OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-def generate(access_counts: dict) -> str:
+def generate(access_counts: dict, api_key: str = None) -> str:
     if not access_counts:
         return "No access data provided."
 
     prompt = build_prompt(access_counts)
 
+    # Fallback to env if no key passed
+    final_key = api_key or os.getenv("OPENROUTER_API_KEY")
+
+    if not final_key:
+        return "No API key provided."
+
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {final_key}",
         "Content-Type": "application/json",
         "X-Title": "TierSense"
     }

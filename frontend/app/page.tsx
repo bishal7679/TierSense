@@ -1,8 +1,7 @@
 "use client";
 
 import type React from "react";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Download, Settings, BarChart3, FileText, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -121,6 +120,17 @@ export default function TierSense() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [results, setResults] = useState<typeof mockResults | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+
+  // 💾 Load API key from localStorage on mount
+  useEffect(() => {
+    const savedKey = localStorage.getItem("tiersense_api_key");
+    if (savedKey) setApiKey(savedKey);
+  }, []);
+
+  // 💾 Save API key to localStorage on change
+  useEffect(() => {
+    if (apiKey) localStorage.setItem("tiersense_api_key", apiKey);
+  }, [apiKey]);
 
   const handleRunAnalysis = async () => {
     try {
@@ -396,55 +406,6 @@ export default function TierSense() {
                     </div>
                   </CardContent>
                 </Card>
-
-                {/* Heatmap Visualization
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg font-medium">
-                      Tier Distribution
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {results?.analysis?.map((item, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center space-x-3"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-slate-900 truncate">
-                              {item.path}
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              {item.access_frequency} • Score: {item.score}
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-16 bg-gray-200 rounded-full h-2">
-                              <div
-                                className={`h-2 rounded-full ${getTierColor(
-                                  item.tier
-                                )}`}
-                                style={{ width: `${item.score * 100}%` }}
-                              ></div>
-                            </div>
-                            <span
-                              className={`px-2 py-1 text-xs font-medium rounded ${
-                                item.tier === "HOT"
-                                  ? "bg-red-100 text-red-800"
-                                  : item.tier === "WARM"
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : "bg-blue-100 text-blue-800"
-                              }`}
-                            >
-                              {item.tier}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card> */}
 
                 <Card>
                   <CardHeader>
