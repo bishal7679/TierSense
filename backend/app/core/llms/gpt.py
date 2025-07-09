@@ -34,8 +34,13 @@ def generate(access_counts: dict) -> str:
         raw = data["choices"][0]["message"]["content"].strip()
 
         # Save raw output for inspection
-        with open("/home/deepayan/llm_raw_output.log", "w") as f:
-            f.write(raw)
+        log_path = "logs/llm_raw_output.log"
+        try:
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            with open(log_path, "w") as f:
+                f.write(raw)
+        except Exception as log_err:
+            print(f"Failed to write raw output: {log_err}")
 
         return _extract_json(raw)
 

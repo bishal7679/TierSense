@@ -48,7 +48,9 @@ def generate(access_counts: dict) -> str:
 def _extract_json(raw: str) -> str:
     # Save raw LLM output for debugging
     try:
-        with open("/home/ubuntu/llm_raw_output.log", "w") as f:
+        log_path = "logs/llm_raw_output.log"
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, "w") as f:
             f.write(raw)
     except Exception as log_err:
         print(f"⚠️ Failed to write raw output to log: {log_err}")

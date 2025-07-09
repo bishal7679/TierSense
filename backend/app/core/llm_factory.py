@@ -20,11 +20,11 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
     if llm_type not in LLM_DISPATCH:
         raise ValueError(f"Unsupported LLM type: {llm_type}")
 
-    # 🔹 Get raw LLM response
-    raw_output = LLM_DISPATCH[llm_type](access_counts)
-
     try:
-        # Clean markdown/code blocks
+        # 🔹 Get raw LLM response
+        raw_output = LLM_DISPATCH[llm_type](access_counts)
+
+        # Clean markdown/code blocks like ```json ... ```
         cleaned_output = re.sub(r"```(?:json)?\n?(.*?)```", r"\1", raw_output, flags=re.DOTALL).strip()
 
         # Parse the cleaned LLM JSON
@@ -33,14 +33,13 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
         summary = {"total_files": 0, "hot_tier": 0, "warm_tier": 0, "cold_tier": 0}
         analysis = []
 
-        # Normalize keys in access_counts once for safety
+        # Normalize access_counts keys
         normalized_counts = {os.path.normpath(k): v for k, v in access_counts.items()}
 
         for path, tier in parsed.items():
-            normalized_path = os.path.normpath(path.strip())
             tier_upper = tier.strip().upper()
-
             summary["total_files"] += 1
+
             if tier_upper == "HOT":
                 summary["hot_tier"] += 1
             elif tier_upper == "WARM":
@@ -48,13 +47,14 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
             elif tier_upper == "COLD":
                 summary["cold_tier"] += 1
 
-            access_freq = normalized_counts.get(normalized_path, "unknown")
+            normalized_path = os.path.normpath(path if path.startswith("/") else "/" + path)
+            frequency = normalized_counts.get(normalized_path, "unknown")
 
             analysis.append({
-                "path": normalized_path,
+                "path": path,
                 "tier": tier_upper,
-                "score": 0.0,  # Optional future use
-                "access_frequency": access_freq
+                "score": 0.0,
+                "access_frequency": frequency
             })
 
         return {
