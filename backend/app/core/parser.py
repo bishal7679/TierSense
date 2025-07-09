@@ -15,7 +15,7 @@ def parse_logs(log_dir=None):
         print(f"Log directory does not exist: {log_dir}")
         return {}, {}
 
-    last_known_cwd = ""  # Global cwd tracker
+    cwd_cache = {}
 
     for filename in sorted(os.listdir(log_dir)):
         if not filename.endswith(".ndjson"):
@@ -28,31 +28,28 @@ def parse_logs(log_dir=None):
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
                 try:
-                    # Extract latest cwd
                     if 'type=CWD' in line and 'cwd="' in line:
+                        event_id = extract_event_id(line)
                         match = re.search(r'cwd="([^"]+)"', line)
-                        if match:
-                            last_known_cwd = match.group(1)
+                        if match and event_id:
+                            cwd_cache[event_id] = match.group(1)
 
-                    # Extract path and timestamp from PATH entry
                     elif 'type=PATH' in line and 'name=' in line:
+                        event_id = extract_event_id(line)
                         name_match = re.search(r'name="([^"]+)"', line)
                         if not name_match:
                             continue
 
                         name = name_match.group(1)
-                        full_path = os.path.normpath(os.path.join(last_known_cwd, name))
+                        cwd = cwd_cache.get(event_id, "")
+                        full_path = os.path.normpath(os.path.join(cwd, name))
 
                         if full_path.startswith("/mnt/data"):
                             access_counts[full_path] += 1
-
-                            # Extract timestamp from audit(...)
                             timestamp = extract_timestamp(line)
                             if timestamp:
                                 access_times[full_path].append(timestamp)
-
                             good += 1
-                    # Else, ignore (not counted as bad)
                 except Exception as e:
                     print(f"Error parsing line: {e}")
                     bad += 1
@@ -63,6 +60,10 @@ def parse_logs(log_dir=None):
 
     print(f"\nFound {len(access_counts)} unique paths. Total good: {total_good}, bad: {total_bad}")
     return access_counts, access_times
+
+def extract_event_id(line):
+    match = re.search(r'audit\(\d+\.\d+:(\d+)\)', line)
+    return match.group(1) if match else None
 
 def extract_timestamp(line):
     match = re.search(r'audit\((\d+)\.\d+:', line)
