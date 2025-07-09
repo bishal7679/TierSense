@@ -25,7 +25,7 @@ def generate(access_counts: dict, api_key: str = None) -> str:
     }
 
     payload = {
-        "model": "anthropic/claude-3.7-sonnet",
+        "model": "anthropic/claude-3.5-sonnet",
         "messages": [
             {"role": "user", "content": prompt}
         ]
