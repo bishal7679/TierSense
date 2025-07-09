@@ -12,7 +12,7 @@ def parse_logs(log_path=None):
         log_path = os.getenv("LOG_DIR", "/var/log/sharedlogs")
 
     if not os.path.exists(log_path):
-        print(f"❌ Log path does not exist: {log_path}")
+        print(f"Log path does not exist: {log_path}")
         return {}, {}
 
     cwd_cache = {}
@@ -28,11 +28,11 @@ def parse_logs(log_path=None):
             if f.endswith(".ndjson")
         ]
     else:
-        print(f"❌ Invalid log path: {log_path}")
+        print(f"Invalid log path: {log_path}")
         return {}, {}
 
     for path in log_files:
-        print(f"📄 Processing file: {path}")
+        print(f"Processing file: {path}")
         good, bad = 0, 0
 
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
@@ -54,21 +54,22 @@ def parse_logs(log_path=None):
                         cwd = cwd_cache.get(event_id, "")
                         full_path = os.path.normpath(os.path.join(cwd, name))
 
-                        if full_path.startswith("/mnt/data"):
+                        TARGET_PREFIX = os.getenv("TARGET_LOG_PREFIX", "/mnt/data")
+                        if full_path.startswith(TARGET_PREFIX):
                             access_counts[full_path] += 1
                             timestamp = extract_timestamp(line)
                             if timestamp:
                                 access_times[full_path].append(timestamp)
                             good += 1
                 except Exception as e:
-                    print(f"⚠️ Error parsing line: {e}")
+                    print(f"Error parsing line: {e}")
                     bad += 1
 
         total_good += good
         total_bad += bad
-        print(f"✅ Parsed {good} good entries, ⏭️ Skipped {bad} bad entries.")
+        print(f"Parsed {good} good entries, Skipped {bad} bad entries.")
 
-    print(f"\n🔍 Found {len(access_counts)} unique paths. Total good: {total_good}, bad: {total_bad}")
+    print(f"\nFound {len(access_counts)} unique paths. Total good: {total_good}, bad: {total_bad}")
     return access_counts, access_times
 
 def extract_event_id(line):
@@ -83,6 +84,6 @@ def extract_timestamp(line):
             dt = datetime.datetime.fromtimestamp(epoch)
             return dt.isoformat()
         except Exception as e:
-            print(f"⚠️ Timestamp parse error: {e}")
+            print(f"Timestamp parse error: {e}")
             return None
     return None
