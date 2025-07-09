@@ -20,24 +20,24 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
     if llm_type not in LLM_DISPATCH:
         raise ValueError(f"Unsupported LLM type: {llm_type}")
 
+    # 🔹 Get raw LLM response
     raw_output = LLM_DISPATCH[llm_type](access_counts)
 
     try:
-        # Clean markdown/code fences like ```json ... ```
+        # Clean markdown/code blocks
         cleaned_output = re.sub(r"```(?:json)?\n?(.*?)```", r"\1", raw_output, flags=re.DOTALL).strip()
-        parsed = json.loads(cleaned_output)
 
-        # Normalize access_counts for consistent matching
-        normalized_counts = {
-            os.path.normpath(path): count
-            for path, count in access_counts.items()
-        }
+        # Parse the cleaned LLM JSON
+        parsed = json.loads(cleaned_output)
 
         summary = {"total_files": 0, "hot_tier": 0, "warm_tier": 0, "cold_tier": 0}
         analysis = []
 
-        for raw_path, tier in parsed.items():
-            norm_path = os.path.normpath(raw_path)
+        # Normalize keys in access_counts once for safety
+        normalized_counts = {os.path.normpath(k): v for k, v in access_counts.items()}
+
+        for path, tier in parsed.items():
+            normalized_path = os.path.normpath(path.strip())
             tier_upper = tier.strip().upper()
 
             summary["total_files"] += 1
@@ -48,16 +48,19 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
             elif tier_upper == "COLD":
                 summary["cold_tier"] += 1
 
-            frequency = normalized_counts.get(norm_path, "unknown")
+            access_freq = normalized_counts.get(normalized_path, "unknown")
 
             analysis.append({
-                "path": raw_path,                   # keep original path as returned by LLM
+                "path": normalized_path,
                 "tier": tier_upper,
-                "score": 0.0,                       # Optional: score logic
-                "access_frequency": frequency       # now correctly looked up
+                "score": 0.0,  # Optional future use
+                "access_frequency": access_freq
             })
 
-        return {"summary": summary, "analysis": analysis}
+        return {
+            "summary": summary,
+            "analysis": analysis
+        }
 
     except Exception as e:
         raise ValueError(f"LLM did not return valid JSON: {e}")
