@@ -34,6 +34,7 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
         for path, tier in parsed.items():
             tier_upper = tier.strip().upper()
             summary["total_files"] += 1
+
             if tier_upper == "HOT":
                 summary["hot_tier"] += 1
             elif tier_upper == "WARM":
@@ -41,11 +42,14 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
             elif tier_upper == "COLD":
                 summary["cold_tier"] += 1
 
+            # ✅ Fetch actual access count
+            frequency = access_counts.get(path, "unknown")
+
             analysis.append({
                 "path": path,
                 "tier": tier_upper,
-                "score": 0.0,                  
-                "access_frequency": "unknown"  
+                "score": 0.0,  # Placeholder for scoring logic
+                "access_frequency": frequency
             })
 
         return {"summary": summary, "analysis": analysis}
