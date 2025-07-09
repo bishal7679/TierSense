@@ -1,5 +1,6 @@
 import json
 import re
+import os
 from app.core.llms import gemini, gpt, claude, llama, deepseek
 
 LLM_DISPATCH = {
@@ -28,6 +29,9 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
         # Parse the JSON output
         parsed = json.loads(cleaned_output)
 
+        # Normalize access_counts keys once
+        normalized_access_counts = {os.path.normpath(k): v for k, v in access_counts.items()}
+
         summary = {"total_files": 0, "hot_tier": 0, "warm_tier": 0, "cold_tier": 0}
         analysis = []
 
@@ -42,13 +46,14 @@ def generate_tiering_suggestions(llm_type: str, access_counts: dict) -> dict:
             elif tier_upper == "COLD":
                 summary["cold_tier"] += 1
 
-            # ✅ Fetch actual access count
-            frequency = access_counts.get(path, "unknown")
+            # ✅ Normalize path before matching
+            normalized_path = os.path.normpath(path)
+            frequency = normalized_access_counts.get(normalized_path, "unknown")
 
             analysis.append({
                 "path": path,
                 "tier": tier_upper,
-                "score": 0.0,  # Placeholder for scoring logic
+                "score": 0.0,
                 "access_frequency": frequency
             })
 
