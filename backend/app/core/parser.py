@@ -8,7 +8,7 @@ def parse_logs(log_dir=None):
     total_good, total_bad = 0, 0
 
     if not log_dir:
-        log_dir = os.getenv("LOG_DIR", "/mnt/nfs-logs")
+        log_dir = os.getenv("LOG_DIR", "/var/log/sharedlogs")
 
     if not os.path.exists(log_dir):
         print(f"Log directory does not exist: {log_dir}")
