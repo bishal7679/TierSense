@@ -2,11 +2,11 @@
 
 import type React from "react";
 import { useState, useEffect } from "react";
-import { Download, Settings, BarChart3, FileText, Play } from "lucide-react";
+import { Download, Settings, BarChart3, FileText, Play, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -120,19 +120,26 @@ export default function TierSense() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [results, setResults] = useState<typeof mockResults | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [apiKeyWarning, setApiKeyWarning] = useState("");
 
-  // 💾 Load API key from localStorage on mount
+  // Load API key from localStorage on mount
   useEffect(() => {
     const savedKey = localStorage.getItem("tiersense_api_key");
     if (savedKey) setApiKey(savedKey);
   }, []);
 
-  // 💾 Save API key to localStorage on change
+  // Save API key to localStorage on change
   useEffect(() => {
     if (apiKey) localStorage.setItem("tiersense_api_key", apiKey);
   }, [apiKey]);
 
   const handleRunAnalysis = async () => {
+    if (!apiKey) {
+      setApiKeyWarning("API Key is required to run analysis.");
+      return;
+    }
+    setApiKeyWarning(""); // clear warning if present
     try {
       const formData = new FormData();
       formData.append("llm", selectedLLM);
@@ -153,14 +160,30 @@ export default function TierSense() {
       );
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+        // Try to parse error message from backend
+        let errorMsg = "Failed to run analysis.";
+        try {
+          const err = await response.json();
+          if (err.detail && typeof err.detail === "string") {
+            errorMsg = err.detail;
+          }
+        } catch {
+          // fallback to status text
+          errorMsg = response.status === 401
+            ? "Invalid API Key."
+            : `HTTP ${response.status}: ${response.statusText}`;
+        }
+        setApiKeyWarning(errorMsg);
+        return;
       }
 
       const result = await response.json();
       setResults(result);
     } catch (error) {
+      setApiKeyWarning(
+        error instanceof Error ? error.message : "Failed to run analysis."
+      );
       console.error("Failed to fetch:", error);
-      // alert("Run failed: " + error.message)
     }
   };
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -221,13 +244,28 @@ export default function TierSense() {
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="settings-api-key">API Key</Label>
-                    <Input
-                      id="settings-api-key"
-                      type="password"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="Enter your API key"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="settings-api-key"
+                        type={showApiKey ? "text" : "password"}
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder="Enter your API key"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey((v) => !v)}
+                        className="absolute inset-y-0 right-0 flex items-center px-2 text-slate-500"
+                        tabIndex={-1}
+                      >
+                        {showApiKey ? (
+                          <EyeOff className="h-5 w-5" />
+                        ) : (
+                          <Eye className="h-5 w-5" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <Button
                     onClick={() => setShowSettings(false)}
@@ -270,13 +308,31 @@ export default function TierSense() {
                 </div>
                 <div>
                   <Label htmlFor="api-key">API Key</Label>
-                  <Input
-                    id="api-key"
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="Enter API key"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="api-key"
+                      type={showApiKey ? "text" : "password"}
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder="Enter API key"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey((v) => !v)}
+                      className="absolute inset-y-0 right-0 flex items-center px-2 text-slate-500"
+                      tabIndex={-1}
+                    >
+                      {showApiKey ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
+                    </button>
+                  </div>
+                  {apiKeyWarning && (
+                    <p className="text-xs text-red-600 mt-1">{apiKeyWarning}</p>
+                  )}
                 </div>
 
                 <div>
@@ -341,7 +397,7 @@ export default function TierSense() {
 
                 <Button
                   onClick={handleRunAnalysis}
-                  disabled={!selectedLLM || !apiKey || isAnalyzing}
+                  disabled={!selectedLLM || isAnalyzing} // <-- remove !apiKey
                   className="w-full"
                 >
                   {isAnalyzing ? (

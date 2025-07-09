@@ -14,14 +14,11 @@ router = APIRouter()
 @router.post("/run-tiering")
 async def run_tiering(
     llm: str = Form(...),
-    api_key: str = Form(None),
+    api_key: str = Form(...),  # <-- Make required
     file: Optional[UploadFile] = File(None)
 ):
     tmp_path = None
-
-    # Set the API key (UI > .env fallback)
-    if api_key:
-        os.environ["OPENROUTER_API_KEY"] = api_key
+    os.environ["OPENROUTER_API_KEY"] = api_key
 
     try:
         if file:
@@ -38,8 +35,9 @@ async def run_tiering(
             raise HTTPException(status_code=400, detail="No valid file accesses found in log")
 
         generate_heatmap(access_counts)
+        
+        result = generate_tiering_suggestions(llm, access_counts, api_key)
 
-        result = generate_tiering_suggestions(llm, access_counts)
         return JSONResponse(content=result)
 
     except Exception as e:
