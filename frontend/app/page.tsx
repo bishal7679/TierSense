@@ -139,7 +139,8 @@ export default function TierSense() {
       setApiKeyWarning("API Key is required to run analysis.");
       return;
     }
-    setApiKeyWarning(""); // clear warning if present
+    setApiKeyWarning("");
+    setIsAnalyzing(true); // <-- Start spinner
     try {
       const formData = new FormData();
       formData.append("llm", selectedLLM);
@@ -184,6 +185,8 @@ export default function TierSense() {
         error instanceof Error ? error.message : "Failed to run analysis."
       );
       console.error("Failed to fetch:", error);
+    } finally {
+      setIsAnalyzing(false); // <-- Stop spinner
     }
   };
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -661,6 +664,16 @@ export default function TierSense() {
           </div>
         </div>
       </main>
+
+      {isAnalyzing && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 flex flex-col items-center shadow-lg">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mb-4"></div>
+            <div className="text-lg font-medium text-slate-800">AI is analyzing your data...</div>
+            <div className="text-sm text-slate-500 mt-2">This may take a few moments.</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

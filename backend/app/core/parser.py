@@ -3,26 +3,36 @@ import re
 import datetime
 from collections import defaultdict
 
-def parse_logs(log_dir=None):
+def parse_logs(log_path=None):
     access_counts = defaultdict(int)
     access_times = defaultdict(list)
     total_good, total_bad = 0, 0
 
-    if not log_dir:
-        log_dir = os.getenv("LOG_DIR", "/var/log/sharedlogs")
+    if not log_path:
+        log_path = os.getenv("LOG_DIR", "/var/log/sharedlogs")
 
-    if not os.path.exists(log_dir):
-        print(f"Log directory does not exist: {log_dir}")
+    if not os.path.exists(log_path):
+        print(f"❌ Log path does not exist: {log_path}")
         return {}, {}
 
     cwd_cache = {}
 
-    for filename in sorted(os.listdir(log_dir)):
-        if not filename.endswith(".ndjson"):
-            continue
+    # Case 1: Single uploaded file
+    if os.path.isfile(log_path):
+        log_files = [log_path]
+    # Case 2: Folder with multiple .ndjson logs
+    elif os.path.isdir(log_path):
+        log_files = [
+            os.path.join(log_path, f)
+            for f in sorted(os.listdir(log_path))
+            if f.endswith(".ndjson")
+        ]
+    else:
+        print(f"❌ Invalid log path: {log_path}")
+        return {}, {}
 
-        path = os.path.join(log_dir, filename)
-        print(f"Processing file: {path}")
+    for path in log_files:
+        print(f"📄 Processing file: {path}")
         good, bad = 0, 0
 
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
@@ -51,14 +61,14 @@ def parse_logs(log_dir=None):
                                 access_times[full_path].append(timestamp)
                             good += 1
                 except Exception as e:
-                    print(f"Error parsing line: {e}")
+                    print(f"⚠️ Error parsing line: {e}")
                     bad += 1
 
         total_good += good
         total_bad += bad
-        print(f"Parsed {good} good entries, Skipped {bad} bad entries.")
+        print(f"✅ Parsed {good} good entries, ⏭️ Skipped {bad} bad entries.")
 
-    print(f"\nFound {len(access_counts)} unique paths. Total good: {total_good}, bad: {total_bad}")
+    print(f"\n🔍 Found {len(access_counts)} unique paths. Total good: {total_good}, bad: {total_bad}")
     return access_counts, access_times
 
 def extract_event_id(line):
@@ -73,6 +83,6 @@ def extract_timestamp(line):
             dt = datetime.datetime.fromtimestamp(epoch)
             return dt.isoformat()
         except Exception as e:
-            print(f"Timestamp parse error: {e}")
+            print(f"⚠️ Timestamp parse error: {e}")
             return None
     return None
