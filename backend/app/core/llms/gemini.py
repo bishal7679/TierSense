@@ -1,21 +1,22 @@
 import os
 import google.generativeai as genai
 
-def generate(access_counts: dict) -> str:
+def generate(access_counts: dict, api_key: str = None) -> str:
     if not access_counts:
         return "No access data provided."
 
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
+    key = api_key or os.getenv("GEMINI_API_KEY")
+    if not key:
         return "Gemini API error: Missing GEMINI_API_KEY environment variable."
 
     try:
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=key)
 
         prompt = _build_prompt(access_counts)
         model = genai.GenerativeModel("models/gemini-2.0-flash")
         response = model.generate_content(prompt)
         return response.text.strip()
+
     except Exception as e:
         return f"Gemini API error: {e}"
 
