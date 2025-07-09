@@ -27,7 +27,7 @@ async def run_tiering(
                 tmp_path = tmp_file.name
             log_dir = os.path.dirname(tmp_path)
         else:
-            log_dir = os.getenv("LOG_DIR", "/var/log/filebeat_output")
+            log_dir = os.getenv("LOG_DIR", "/var/log/sharedlogs")
 
         access_counts, access_times = parse_logs(log_dir)
 
