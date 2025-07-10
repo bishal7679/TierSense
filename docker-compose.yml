@@ -7,19 +7,16 @@ services:
     container_name: tiersense_backend
     volumes:
       - ./backend:/app
-      - /nfs/logs:/nfs/logs  # Mount NFS log folder
+      - /var/log/sharedlogs:/var/log/sharedlogs  # NFS mount point inside container
     ports:
       - "8000:8000"
     working_dir: /app
     command: >
       sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000"
-    depends_on:
-      - frontend
 
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
     container_name: tiersense_frontend
     volumes:
       - ./frontend:/app
@@ -28,3 +25,11 @@ services:
     working_dir: /app
     command: >
       sh -c "npm install --legacy-peer-deps && npm run dev"
+ 
+volumes:
+  sharedlogs:
+    driver: local
+    driver_opts:
+      type: "nfs"
+      o: "addr=10.14.220.88,nfsvers=4,rw"
+      device: ":/nfs/logs"

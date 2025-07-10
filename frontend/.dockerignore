@@ -1,0 +1,14 @@
+# .dockerignore for both frontend and backend
+node_modules
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
+.DS_Store
+.vscode
+dist
+build
+.npm
+.cache
+*.log
