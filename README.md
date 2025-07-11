@@ -15,22 +15,22 @@ TierSense transforms noisy file access logs into meaningful **tiering decisions*
  
 ## 🧪 Tech Stack
  
-- **Python** (Data pipeline, heatmap, LLM integration)
-- **Filebeat** (Log shipping and monitoring)
-- **Matplotlib / Pandas** (Heatmap generation)
-- **Gemini/OpenAI GPT** (LLM-based recommendations)
-- **Bash/CLI Tools** (Visualization and automation)
+- **Python + FastAPI** – Backend for parsing, heatmap, and LLM integration
+- **Filebeat + auditd** – Real-time file access logging
+- **NFS** – Log sharing from remote audit system
+- **Matplotlib** – Heatmap generation
+- **Next.js + TailwindCSS** – Interactive frontend dashboard
+- **Docker** – Full containerized deployment
  
 ---
  
 ## 🚀 Features
  
 - **Real-time file access simulation, logging & audit analysis via Filebeat**
-- **File access pattern classification (hot/warm/cold)**
-- **Heatmap generation to identify hot and cold files**
-- **LLM-driven tiering advice**
+- **Logs shared from remote NFS server**
+- **Heatmap to visualize file access frequency**
+- **LLM-powered storage tiering (HOT/WARM/COLD)**
 - **Multiple LLM-powered advisory engines (OpenAI/Gemini/Claude/Llama/Deepseek)**
-- **Easy integration into storage lifecycle and archive tools**
 - **Full Dockerized deployment (NFS + Frontend + Backend)**
 
 ---
@@ -91,7 +91,7 @@ TierSense/
   - Runs Filebeat to capture logs
   - Hosts parsed logs in `/nfs/logs`
 
-- **VM2 (App Host):**
+- **VM2 (App Host + NFS Client):**
   - Hosts **Frontend** and **Backend** containers
   - Mounts `/nfs/logs` from VM1 at `/var/log/sharedlogs`
 
@@ -132,7 +132,12 @@ echo "✅ NFS server setup complete!"
 echo "📦 Exported directory: $EXPORT_DIR"
 echo "🌐 Accessible from: $EXPORT_CLIENT"
 ```
-
+### NFS Client Setup on VM2
+```bash
+sudo mkdir -p /var/log/sharedlogs
+sudo apt update
+sudo apt install nfs-common -y
+```
 #### 🔄 Make mount persistent on VM2
 ```bash
 # One-time mount
