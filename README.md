@@ -55,8 +55,7 @@ TierSense/
 
 ## 🔄 Project Pipeline
 
-<img width="2534" height="717" alt="image" src="https://github.com/user-attachments/assets/d9e873b3-6002-4b7b-8f41-d7db880f3e4d" />
-
+<img width="2534" height="541" alt="image-1" src="https://github.com/user-attachments/assets/506e1f36-688b-4aa5-bc12-1193c4c89915" />
 
 ---
 
