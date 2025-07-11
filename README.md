@@ -13,19 +13,6 @@
  
 TierSense transforms noisy file access logs into meaningful **tiering decisions**.
  
-### ⚙️ Key Pipeline:
-
-```
-Logs → Parser → Heatmap → LLM Suggestion → Tiering Advice
-```
-- **Logs:** Captured using Filebeat from simulated or real environments.
-- **Parser:** Converts JSON logs into structured data.
-- **Heatmap:** Aggregates file usage patterns.
-- **LLM:** (Gemini/OpenAI) gives tiering advice—hot, warm, or cold—based on usage.
-- **Visualization:** Heatmap output to help human users too.
- 
----
- 
 ## 🧪 Tech Stack
  
 - **Python** (Data pipeline, heatmap, LLM integration)
@@ -38,79 +25,159 @@ Logs → Parser → Heatmap → LLM Suggestion → Tiering Advice
  
 ## 🚀 Features
  
-- Real-time file access simulation and logging
-- Heatmap generation to identify hot and cold files
-- LLM-driven tiering advice
-- Visual output with heatmap
-- Easy integration into storage lifecycle and archive tools
- 
----
- 
-## 🛠️ Setup Instructions (Linux Only)
+- **Real-time file access simulation and logging**
+- **Real-time audit log analysis via Filebeat**
+- **File access pattern classification (hot/warm/cold)**
+- **Heatmap generation to identify hot and cold files**
+- **Visual output with heatmap**
+- **LLM-driven tiering advice**
+- **Multiple LLM-powered advisory engines (OpenAI/Gemini/Claude/Llama/Deepseek)**
+- **Cloud tier recommendation**
+- **Easy integration into storage lifecycle and archive tools**
+- **Full Dockerized deployment (NFS + Frontend + Backend)**
 
-✅ Prerequisites
-```
-Python 3.9 or higher
-Filebeat 8.x installed and accessible
-Internet access for Gemini/OpenAI API calls
-```
-## 🔧 Step-by-Step Setup
-1. Clone the Repository
-```
-git clone https://github.com/bishal7679/TierSense.git
-cd TierSense
-```
-2. Make Setup Script Executable and Run
-```
-chmod +x setup.sh
-sudo ./setup.sh
-```
-This will:
-- Install Python dependencies
-- Copy filebeat.yml into system path
-- Restart filebeat.service
-- Set appropriate audit rules
-
-3. Set Gemini API Key (Environment Variable)
-```
-export GEMINI_API_KEY=your_key_here
-```
-You can also persist this by adding it to your shell profile:
-```
-echo 'export GEMINI_API_KEY=your_key_here' >> ~/.bashrc
-source ~/.bashrc
- ```
 ---
 
-## 🛠 How to Run
+## 📁 Project Structure
+```
+TierSense/
+├── backend/
+│   ├── app/
+│   ├── Dockerfile
+│   └── requirements.txt
+├── frontend/
+│   ├── components/
+│   ├── pages/
+│   ├── Dockerfile
+│   └── package.json
+├── docker-compose.yml
+└── README.md
+```
 
-Run the parser + tiering pipeline:
- 
+---
+
+## 🔄 Project Pipeline
+
+<img width="2534" height="717" alt="image" src="https://github.com/user-attachments/assets/d9e873b3-6002-4b7b-8f41-d7db880f3e4d" />
+
+
+---
+
+## 🧠 Architecture Diagram
+```
+                    ┌──────────────┐
+                    │   VM1 (NFS)  │
+                    │              │
+                    │  /nfs/logs   │◄─── Filebeat Output
+                    │              │
+                    └─────▲────────┘
+                          │   (NFS Mount)
+                          │
+                          ▼
+┌──────────────┐   Mounts NFS   ┌──────────────────┐
+│   VM2        │──────────────▶│ Docker Containers │
+│              │               │                   │
+│ /var/log/... │               │ - Backend (FastAPI)
+│              │               │ - Frontend(nextjs)│
+└──────────────┘               └────────────────── ┘
+```
+
+---
+
+## 🛠️ How to Use
+
+### 1️⃣ Basic Setup Instructions
+
+#### 🔧 Step 1: Set up two VMs
+- **VM1 (Filebeat + NFS Server):**
+  - Runs Filebeat to capture logs
+  - Hosts parsed logs in `/nfs/logs`
+
+- **VM2 (App Host):**
+  - Hosts **Frontend** and **Backend** containers
+  - Mounts `/nfs/logs` from VM1 at `/var/log/sharedlogs`
+
+#### 🪵 Filebeat Setup (on VM1)
+- Already configured via `basic-setup.sh`
+- Ensure it exports logs in `.ndjson` format to `/nfs/logs/`
+
+#### 📦 NFS Server Setup (on VM1)
 ```bash
+#!/bin/bash
 
-sudo -E python3 tiering-advisor.py
+set -e
 
+# Configuration
+EXPORT_DIR="/nfs/logs"
+EXPORT_CLIENT="*" # You can set to specific IP or CIDR like 192.168.1.0/24
+
+echo "🛠 Installing NFS server..."
+sudo apt update
+sudo apt install -y nfs-kernel-server
+
+echo "📁 Creating export directory at $EXPORT_DIR..."
+sudo mkdir -p "$EXPORT_DIR"
+sudo chown nobody:nogroup "$EXPORT_DIR"
+sudo chmod 777 "$EXPORT_DIR"  # Adjust permissions as needed
+
+echo "🔧 Configuring /etc/exports..."
+EXPORT_ENTRY="$EXPORT_DIR $EXPORT_CLIENT(rw,sync,no_subtree_check,no_root_squash)"
+grep -qxF "$EXPORT_ENTRY" /etc/exports || echo "$EXPORT_ENTRY" | sudo tee -a /etc/exports
+
+echo "📤 Exporting NFS shares..."
+sudo exportfs -a
+
+echo "🔁 Restarting NFS server..."
+sudo systemctl restart nfs-kernel-server
+
+echo "✅ NFS server setup complete!"
+echo "📦 Exported directory: $EXPORT_DIR"
+echo "🌐 Accessible from: $EXPORT_CLIENT"
 ```
 
-View the heatmap result:
- 
+#### 🔄 Make mount persistent on VM2
 ```bash
+# One-time mount
+sudo mount <VM1-IP>:/nfs/logs /var/log/sharedlogs
 
-sudo xdg-open /var/log/filebeat_output/access-heatmap.png
-
+# Make it persistent
+sudo bash -c 'echo "<VM1-IP>:/nfs/logs /var/log/sharedlogs nfs defaults 0 0" >> /etc/fstab'
 ```
-This will display the visual heatmap that reflects your file usage patterns.
+Replace `<VM1-IP>` with the actual IP address of your VM1 (NFS host).
 
----
+### 2️⃣ Audit Rules Setup
+```bash
+sudo auditctl -w /mnt/data -p war -k access_monitor
+```
 
-## 📊 Heatmap Sample Output
+### 3️⃣ Docker Support Setup
 
-<p align="center">
-<img src="https://github.com/user-attachments/assets/a82ffe0c-84fd-4049-add4-eabc80040cf2" alt="access_heatmap" width="800" height="400"/>
-</p>
+#### 📦 docker-compose.yml
+```yaml
+version: '3.9'
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - /var/log/sharedlogs:/var/log/sharedlogs
 
-These visuals give you an intuitive idea of how your data is being used—and how it should be stored.
- 
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+```
+
+#### 🔥 Build and Run All at Once
+```bash
+docker compose build --no-cache
+docker compose up
+```
+> Make sure VM2 has the NFS mount `/var/log/sharedlogs` pointing to VM1's `/nfs/logs`
+
 ---
 
 ## 💼 Business Use Cases
@@ -128,3 +195,6 @@ These visuals give you an intuitive idea of how your data is being used—and ho
   - Converting raw JSON into visual and AI-friendly format
   - Integrating with Gemini API to offload decision-making to LLMs
   - Making everything scriptable and automatable
+    
+## 📬 Contact
+For any issues or enhancements, feel free to raise a GitHub issue or pull request. Happy tiering!
