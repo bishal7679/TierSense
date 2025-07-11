@@ -25,14 +25,11 @@ TierSense transforms noisy file access logs into meaningful **tiering decisions*
  
 ## 🚀 Features
  
-- **Real-time file access simulation and logging**
-- **Real-time audit log analysis via Filebeat**
+- **Real-time file access simulation, logging & audit analysis via Filebeat**
 - **File access pattern classification (hot/warm/cold)**
 - **Heatmap generation to identify hot and cold files**
-- **Visual output with heatmap**
 - **LLM-driven tiering advice**
 - **Multiple LLM-powered advisory engines (OpenAI/Gemini/Claude/Llama/Deepseek)**
-- **Cloud tier recommendation**
 - **Easy integration into storage lifecycle and archive tools**
 - **Full Dockerized deployment (NFS + Frontend + Backend)**
 
@@ -65,21 +62,23 @@ TierSense/
 
 ## 🧠 Architecture Diagram
 ```
-                    ┌──────────────┐
-                    │   VM1 (NFS)  │
-                    │              │
-                    │  /nfs/logs   │◄─── Filebeat Output
-                    │              │
-                    └─────▲────────┘
-                          │   (NFS Mount)
-                          │
-                          ▼
-┌──────────────┐   Mounts NFS   ┌──────────────────┐
-│   VM2        │──────────────▶│ Docker Containers │
-│              │               │                   │
-│ /var/log/... │               │ - Backend (FastAPI)
-│              │               │ - Frontend(nextjs)│
-└──────────────┘               └────────────────── ┘
++----------------+       NFS Mount Point        +---------------------+
+|   VM1 (NFS)    | <--------------------------- | Docker Containers   |
+|                |                              |                     |
+|  /nfs/logs     |<------ Filebeat Output ------| - Backend (FastAPI) |
+|  (NFS Share)   |                              | - Frontend (Next.js)|
++----------------+                              +---------------------+
+       ^                                                ^
+       |                                                |
+       |  (NFS Exported)                                |
+       |                                                |
+       |                                                |
++----------------+                                      |
+|      VM2       |<-------------------------------------
+|                |    Mounts NFS Share
+| /var/log/...   |    (e.g., /mnt/nfs/logs on VM2)
+|                |
++----------------+
 ```
 
 ---
@@ -141,7 +140,9 @@ echo "🌐 Accessible from: $EXPORT_CLIENT"
 sudo mount <VM1-IP>:/nfs/logs /var/log/sharedlogs
 
 # Make it persistent
-sudo bash -c 'echo "<VM1-IP>:/nfs/logs /var/log/sharedlogs nfs defaults 0 0" >> /etc/fstab'
+sudo bash -c 'echo "<VM1-IP>:/nfs/logs /var/log/sharedlogs nfs defaults,_netdev,x-systemd.automount,noauto 0 0
+" >> /etc/fstab'
+
 ```
 Replace `<VM1-IP>` with the actual IP address of your VM1 (NFS host).
 
