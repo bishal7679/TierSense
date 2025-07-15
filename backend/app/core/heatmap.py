@@ -43,7 +43,7 @@ def generate_heatmap(access_counts):
         elif 20 <= count < 100:
             colors.append('yellow')   # WARM
         else:
-            colors.append('green')    # COLD
+            colors.append('blue')    # COLD
 
     fig, ax = plt.subplots(figsize=(10, len(files) * 0.4 + 1))
     ax.barh(files, counts, color=colors)
