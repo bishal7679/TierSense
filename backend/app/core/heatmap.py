@@ -41,7 +41,7 @@ def generate_heatmap(access_counts):
         if count >= 100:
             colors.append('red')      # HOT
         elif 20 <= count < 100:
-            colors.append('orange')   # WARM
+            colors.append('yellow')   # WARM
         else:
             colors.append('green')    # COLD
 

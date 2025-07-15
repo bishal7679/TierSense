@@ -457,7 +457,7 @@ export default function TierSense() {
                         <div className="text-sm text-slate-600">WARM</div>
                       </div>
                       <div className="text-center">
-                        <div className="text-2xl font-semibold text-blue-600">
+                        <div className="text-2xl font-semibold text-green-600">
                           {results?.summary?.cold_tier ?? 0}
                         </div>
                         <div className="text-sm text-slate-600">COLD</div>
