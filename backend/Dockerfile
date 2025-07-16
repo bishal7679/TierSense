@@ -1,24 +1,22 @@
-# Use a minimal Python base
 FROM python:3.12-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Set working directory
 WORKDIR /app
 
-# Copy setup script and run it during build
+# Copy scripts and env
 COPY setup_base.sh /setup_base.sh
-RUN chmod +x /setup_base.sh && /setup_base.sh
+COPY init_runtime.sh /init_runtime.sh
+COPY .env /app/.env
+RUN chmod +x /setup_base.sh /init_runtime.sh
 
-# Copy backend requirements and install
+# Install Python requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the application code
+# Copy backend code
 COPY . .
 
-# Expose FastAPI port
 EXPOSE 8000
 
-# Runtime init + launch FastAPI
-CMD ["/bin/bash", "/init_runtime.sh"]
+CMD ["/init_runtime.sh"]
