@@ -1,18 +1,18 @@
 version: '3.9'
 
 services:
-
   backend:
     build:
-      context: ./backend                # Set context to root to access .env
+      context: ./backend
     container_name: tiersense-backend
     ports:
       - "8000:8000"
     privileged: true
     volumes:
-      - /mnt/nfs_logs:/app/logs          # NFS-mounted host directory
+      - /mnt/nfs_logs:/app/logs
+      - ../.env:/app/.env             # Mount root .env into container
     env_file:
-      - .env                             # Loads environment variables at runtime
+      - ../.env                       # Optional: also inject as ENV vars
     environment:
       PYTHONUNBUFFERED: "1"
 
