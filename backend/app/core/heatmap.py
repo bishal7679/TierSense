@@ -1,26 +1,27 @@
+import os
 import matplotlib.pyplot as plt
 from app.config import HEATMAP_PATH
-import os
 
-def generate_heatmap(access_counts):
+def generate_heatmap(access_counts: dict):
     if not access_counts:
-        print("No data to generate heatmap.")
+        print("[!] No data to generate heatmap.")
         return
 
     files = list(access_counts.keys())
     counts = list(access_counts.values())
 
-    # Tier-based color mapping
-    colors = []
-    for count in counts:
+    # Determine tier color based on access frequency
+    def get_color(count):
         if count >= 100:
-            colors.append('red')      # HOT
-        elif 20 <= count < 100:
-            colors.append('orange')   # WARM
+            return "red"     # HOT
+        elif count >= 20:
+            return "orange"  # WARM
         else:
-            colors.append('blue')    # COLD
+            return "blue"    # COLD
 
-    fig, ax = plt.subplots(figsize=(10, len(files) * 0.4 + 1))
+    colors = [get_color(c) for c in counts]
+
+    fig, ax = plt.subplots(figsize=(12, len(files) * 0.4 + 1))
     ax.barh(files, counts, color=colors)
     ax.set_xlabel("Access Frequency")
     ax.set_title("File Access Heatmap")

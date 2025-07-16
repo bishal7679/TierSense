@@ -122,6 +122,7 @@ export default function TierSense() {
   const [showSettings, setShowSettings] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyWarning, setApiKeyWarning] = useState("");
+  const [logDirectory, setLogDirectory] = useState("");
 
   // Load API key from localStorage on mount
   useEffect(() => {
@@ -150,6 +151,9 @@ export default function TierSense() {
           throw new Error("Please select and upload a valid .ndjson file.");
         }
         formData.append("file", uploadedFile);
+      }
+      else {
+        formData.append("target_dir", logDirectory); // Send log directory path to backend
       }
 
       const response = await fetch(
@@ -351,13 +355,24 @@ export default function TierSense() {
                         onChange={(e) => setInputSource(e.target.value)}
                         className="h-4 w-4 text-slate-600"
                       />
-                      <Label
-                        htmlFor="default-logs"
-                        className="text-sm font-normal"
-                      >
+                      <Label htmlFor="default-logs" className="text-sm font-normal">
                         Use default /logs folder
                       </Label>
                     </div>
+                    
+                    {inputSource === "default" && (
+                    <div className="mt-2">
+                      <Label htmlFor="log-directory" className="text-sm">Directory Path</Label>
+                      <Input
+                        id="log-directory"
+                        type="text"
+                        placeholder="/mnt/nfs/logs"
+                        value={logDirectory}
+                        onChange={(e) => setLogDirectory(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                  )}
                     <div className="flex items-center space-x-2">
                       <input
                         type="radio"
