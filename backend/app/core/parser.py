@@ -8,12 +8,9 @@ def parse_logs(log_path=None, selected_prefix=None):
     access_times = defaultdict(list)
     total_good, total_bad = 0, 0
 
-    if not log_path:
-        log_path = os.getenv("LOG_DIR", "/var/log/sharedlogs")
-
-    if not selected_prefix:
-        selected_prefix = os.getenv("TARGET_LOG_PREFIX", "/mnt/data")
-
+    # Load from .env if not passed
+    log_path = log_path or os.getenv("LOG_DIR", "/app/logs")
+    selected_prefix = selected_prefix or os.getenv("TARGET_LOG_PREFIX", "/mnt/data")
 
     if not os.path.exists(log_path):
         print(f"[ERROR] Log path does not exist: {log_path}")
@@ -21,20 +18,21 @@ def parse_logs(log_path=None, selected_prefix=None):
 
     cwd_cache = {}
 
-    # Identify files
+    # Gather log files
     if os.path.isfile(log_path):
         log_files = [log_path]
     elif os.path.isdir(log_path):
-        log_files = [
+        log_files = sorted([
             os.path.join(log_path, f)
-            for f in sorted(os.listdir(log_path))
+            for f in os.listdir(log_path)
             if f.endswith(".ndjson")
-        ]
+        ])
     else:
         print(f"[ERROR] Invalid log path: {log_path}")
         return {}, {}
 
     print(f"[INFO] Using target path prefix: {selected_prefix}")
+    print(f"[INFO] Found {len(log_files)} log files.")
 
     for path in log_files:
         print(f"[INFO] Processing file: {path}")
@@ -43,14 +41,12 @@ def parse_logs(log_path=None, selected_prefix=None):
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
                 try:
-                    # Handle type=CWD to cache working directory per event ID
                     if 'type=CWD' in line and 'cwd="' in line:
                         event_id = extract_event_id(line)
                         cwd_match = re.search(r'cwd="([^"]+)"', line)
                         if cwd_match and event_id:
                             cwd_cache[event_id] = cwd_match.group(1)
 
-                    # Handle type=PATH to resolve full path
                     elif 'type=PATH' in line and 'name=' in line:
                         event_id = extract_event_id(line)
                         name_match = re.search(r'name="([^"]+)"', line)
@@ -61,7 +57,6 @@ def parse_logs(log_path=None, selected_prefix=None):
                         cwd = cwd_cache.get(event_id, "")
                         full_path = os.path.normpath(os.path.join(cwd, name))
 
-                        # Only include accesses inside the selected directory
                         if full_path.startswith(selected_prefix):
                             access_counts[full_path] += 1
                             ts = extract_timestamp(line)
@@ -76,7 +71,7 @@ def parse_logs(log_path=None, selected_prefix=None):
         total_bad += bad
         print(f"[INFO] File done: {good} valid entries, {bad} skipped.")
 
-    print(f"[RESULT] Total files parsed: {len(access_counts)} | Total good: {total_good}, bad: {total_bad}")
+    print(f"[RESULT] Total files parsed: {len(log_files)} | Total good: {total_good}, bad: {total_bad}")
     return access_counts, access_times
 
 def extract_event_id(line):

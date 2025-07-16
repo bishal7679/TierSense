@@ -1,35 +1,28 @@
-version: "3.9"
+version: '3.9'
 
 services:
+
   backend:
     build:
       context: ./backend
-    container_name: tiersense_backend
-    volumes:
-      - ./backend:/app
-      - /var/log/sharedlogs:/var/log/sharedlogs  # NFS mount point inside container
+    container_name: tiersense-backend
     ports:
       - "8000:8000"
-    working_dir: /app
-    command: >
-      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    privileged: true
+    volumes:
+      - /mnt/nfs_logs:/app/logs   #  host NFS mount → container persistent volume
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
 
   frontend:
     build:
       context: ./frontend
-    container_name: tiersense_frontend
-    volumes:
-      - ./frontend:/app
+    container_name: tiersense-frontend
     ports:
       - "3000:3000"
-    working_dir: /app
-    command: >
-      sh -c "npm install --legacy-peer-deps && npm run dev"
- 
-volumes:
-  sharedlogs:
-    driver: local
-    driver_opts:
-      type: "nfs"
-      o: "addr=10.14.220.88,nfsvers=4,rw"
-      device: ":/nfs/logs"
+    depends_on:
+      - backend
+    environment:
+      NODE_ENV: production
