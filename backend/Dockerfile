@@ -1,24 +1,24 @@
-# Use a minimal Python image
+# Use a minimal Python base
 FROM python:3.12-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
- 
-# Set the working directory
+
+# Set working directory
 WORKDIR /app
- 
-# Copy and run setup script to install filebeat, auditd, nfs-common
-COPY ./setup_base.sh /setup_base.sh
+
+# Copy setup script and run it during build
+COPY setup_base.sh /setup_base.sh
 RUN chmod +x /setup_base.sh && /setup_base.sh
 
-# Install Python dependencies
+# Copy backend requirements and install
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
- 
-# Copy all backend app files
+
+# Copy the application code
 COPY . .
- 
-# Expose backend port
+
+# Expose FastAPI port
 EXPOSE 8000
- 
-# Run the FastAPI server
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Runtime init + launch FastAPI
+CMD ["/bin/bash", "/init_runtime.sh"]
