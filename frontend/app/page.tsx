@@ -156,14 +156,13 @@ export default function TierSense() {
         formData.append("target_dir", logDirectory || "/logs"); // fallback
       }
 
-      const response = await fetch(
-        "http://10.14.220.29:8000/api/run-tiering",
+      const response = await fetch("api/run-tiering",
         {
           method: "POST",
           body: formData,
         }
       );
-
+      
       if (!response.ok) {
         // Try to parse error message from backend
         let errorMsg = "Failed to run analysis.";
