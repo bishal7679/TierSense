@@ -7,11 +7,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
  
 # Copy and run setup script to install filebeat, auditd, nfs-common
-COPY setup_base.sh /setup_base.sh
+COPY ./setup_base.sh /setup_base.sh
 RUN chmod +x /setup_base.sh && /setup_base.sh
-
-# Copy and load env file early (optional for debugging inside container)
-COPY .env .env
 
 # Install Python dependencies
 COPY requirements.txt .
