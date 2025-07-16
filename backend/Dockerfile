@@ -4,19 +4,20 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
-# Copy scripts and env
+# Copy setup scripts
 COPY setup_base.sh /setup_base.sh
 COPY init_runtime.sh /init_runtime.sh
-COPY .env /app/.env
 RUN chmod +x /setup_base.sh /init_runtime.sh
 
-# Install Python requirements
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend code
+# Copy backend application code
 COPY . .
 
+# Expose FastAPI port
 EXPOSE 8000
 
+# Run init script which mounts NFS and launches backend
 CMD ["/init_runtime.sh"]

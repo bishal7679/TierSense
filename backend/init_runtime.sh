@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-# Run full system setup
+echo "[+] Running system setup (Filebeat, auditd, NFS mount)..."
 /setup_base.sh
 
-# Start FastAPI backend
+echo "[+] Starting FastAPI backend..."
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000

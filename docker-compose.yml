@@ -4,15 +4,16 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: .                         # Set context to root to access .env
+      dockerfile: backend/Dockerfile    # Specify the actual Dockerfile
     container_name: tiersense-backend
     ports:
       - "8000:8000"
     privileged: true
     volumes:
-      - /mnt/nfs_logs:/app/logs   #  host NFS mount → container persistent volume
+      - /mnt/nfs_logs:/app/logs          # NFS-mounted host directory
     env_file:
-      - .env
+      - .env                             # Loads environment variables at runtime
     environment:
       PYTHONUNBUFFERED: "1"
 
