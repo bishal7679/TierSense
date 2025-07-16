@@ -153,7 +153,7 @@ export default function TierSense() {
         formData.append("file", uploadedFile);
       }
       else {
-        formData.append("target_dir", logDirectory); // Send log directory path to backend
+        formData.append("target_dir", logDirectory || "/logs"); // fallback
       }
 
       const response = await fetch(
@@ -364,13 +364,16 @@ export default function TierSense() {
                     <div className="mt-2">
                       <Label htmlFor="log-directory" className="text-sm">Directory Path</Label>
                       <Input
-                        id="log-directory"
-                        type="text"
-                        placeholder="/mnt/nfs/logs"
-                        value={logDirectory}
-                        onChange={(e) => setLogDirectory(e.target.value)}
-                        className="mt-1"
-                      />
+                      id="log-directory"
+                      type="text"
+                      placeholder="/mnt/nfs/logs"
+                      value={logDirectory}
+                      onChange={(e) => {
+                        setLogDirectory(e.target.value);
+                        setInputSource("default"); // <-- Fix: ensure radio updates
+                      }}
+                      className="mt-1"
+                    />
                     </div>
                   )}
                     <div className="flex items-center space-x-2">

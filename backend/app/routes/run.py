@@ -19,28 +19,33 @@ async def run_tiering(
     llm: str = Form(...),
     api_key: str = Form(...),
     file: Optional[UploadFile] = File(None),
-    target_dir: Optional[str] = Form(None)  # ✅ user-defined filter for file paths
+    target_dir: Optional[str] = Form(None)
 ):
     tmp_path = None
     os.environ["OPENROUTER_API_KEY"] = api_key
 
     try:
-        # Step 1: Set user-specified prefix filter if given (used in parser)
+        # Step 1: Normalize and apply custom prefix
         if target_dir:
-            os.environ["TARGET_LOG_PREFIX"] = target_dir.strip()
+            clean_dir = target_dir.strip()
+            if not clean_dir.startswith("/"):
+                clean_dir = "/" + clean_dir
+            os.environ["TARGET_LOG_PREFIX"] = clean_dir
         else:
-            os.environ["TARGET_LOG_PREFIX"] = "/mnt"  # fallback if UI fails to send
+            os.environ["TARGET_LOG_PREFIX"] = "/mnt"
 
-        # Step 2: Handle file upload or default log folder
+        print(f"[INFO] Using target path prefix: {os.environ['TARGET_LOG_PREFIX']}")
+
+        # Step 2: Handle uploaded .ndjson or mounted volume logs
         if file:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".ndjson") as tmp_file:
                 tmp_file.write(await file.read())
                 tmp_path = tmp_file.name
             log_path = tmp_path
         else:
-            log_path = LOG_DIR  # Use Docker-mounted shared volume (/app/logs)
+            log_path = LOG_DIR  # /app/logs
 
-        # Step 3: Parse logs and generate heatmap
+        # Step 3: Parse logs + generate heatmap
         access_counts, access_times = parse_logs(log_path)
 
         if not access_counts:
@@ -48,7 +53,7 @@ async def run_tiering(
 
         generate_heatmap(access_counts)
 
-        # Step 4: Get LLM-based tiering suggestions
+        # Step 4: Invoke LLM for tiering recommendation
         result = generate_tiering_suggestions(llm, access_counts, api_key)
 
         return JSONResponse(content=result)

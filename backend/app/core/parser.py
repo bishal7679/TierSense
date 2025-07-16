@@ -12,7 +12,8 @@ def parse_logs(log_path=None, selected_prefix=None):
         log_path = os.getenv("LOG_DIR", "/var/log/sharedlogs")
 
     if not selected_prefix:
-        selected_prefix = "/mnt/data"  # fallback prefix if none passed
+        selected_prefix = os.getenv("TARGET_LOG_PREFIX", "/mnt/data")
+
 
     if not os.path.exists(log_path):
         print(f"[ERROR] Log path does not exist: {log_path}")
