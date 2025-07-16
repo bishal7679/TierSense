@@ -4,8 +4,7 @@ services:
 
   backend:
     build:
-      context: .                         # Set context to root to access .env
-      dockerfile: backend/Dockerfile    # Specify the actual Dockerfile
+      context: ./backend                # Set context to root to access .env
     container_name: tiersense-backend
     ports:
       - "8000:8000"
