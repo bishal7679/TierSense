@@ -13,7 +13,8 @@ fi
 
 echo "[+] Creating /mnt/nfs and mounting $NFS_SERVER_IP:$NFS_MOUNT_DIR..."
 mkdir -p /mnt/nfs
-mount -t nfs "${NFS_SERVER_IP}:${NFS_MOUNT_DIR}" /mnt/nfs
+mount -t nfs -o nolock ${NFS_SERVER_IP}:${NFS_MOUNT_DIR} /mnt/nfs
+
 
 echo "[+] Creating persistent Docker volume path: /app/logs"
 mkdir -p /app/logs
