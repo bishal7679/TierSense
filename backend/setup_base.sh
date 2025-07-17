@@ -38,9 +38,8 @@ filebeat.inputs:
 output.file:
   path: "/app/logs"
   filename: "access-tiering.ndjson"
-  codec:
-    format:
-      string: '{"@timestamp":"%{@timestamp}","message":"%{[message]}"}'
+  codec.json:
+    pretty: false
 EOF
 
 echo "[+] Starting filebeat..."
