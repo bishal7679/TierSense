@@ -41,9 +41,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Add Elastic repo (GPG key + repo) and install Filebeat only once
 RUN curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor -o /usr/share/keyrings/elastic.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/elastic.gpg] https://artifacts.elastic.co/packages/7.x/apt stable main" \
+    echo "deb [trusted=yes] https://artifacts.elastic.co/packages/7.x/apt stable main" \
     > /etc/apt/sources.list.d/elastic-7.x.list && \
-    apt-get update && apt-get install -y filebeat && \
+    apt-get update && apt-get install -y filebeat rpcbind && \
     rm -rf /var/lib/apt/lists/*
 
 # --- Copy app and scripts ---
