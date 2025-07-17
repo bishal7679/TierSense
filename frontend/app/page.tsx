@@ -156,7 +156,8 @@ export default function TierSense() {
         formData.append("target_dir", logDirectory || "/logs"); // fallback
       }
 
-      const response = await fetch("api/run-tiering",
+      const response = await fetch(
+        "http://backend:8000/api/run-tiering",
         {
           method: "POST",
           body: formData,
