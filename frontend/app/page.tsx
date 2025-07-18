@@ -156,13 +156,12 @@ export default function TierSense() {
         formData.append("target_dir", logDirectory || "/logs"); // fallback
       }
 
-      const response = await fetch(
-        "http://tiersense-backend:8000/api/run-tiering",
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+      const response = await fetch(`${apiUrl}/api/run-tiering`, {
+        method: "POST",
+        body: formData,
+      });
       
       if (!response.ok) {
         // Try to parse error message from backend

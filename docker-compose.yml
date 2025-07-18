@@ -5,13 +5,16 @@ services:
     build:
       context: ./backend
     container_name: tiersense-backend
+
     ports:
       - "8000:8000"
-    privileged: true           # Needed for mount, audit log access
+    privileged: true  # Needed for auditd + filebeat access inside container
+
     volumes:
-      - ${NFS_MOUNT_DIR}:/mnt/nfs              # Dynamically mount NFS from .env
-      - ./logs:/app/logs                       # Persist analysis results
-      - ./backend/.env:/app/.env:ro            # Backend-specific env
+      - ${NFS_MOUNT_DIR}:/mnt/nfs                 # NFS mount from host VM1 (specified in .env)
+      - tiersense_logs:/apps/logs                # Persistent logs from analysis
+      - ./backend/.env:/app/.env:ro              # Backend-specific env
+
     env_file:
       - .env
       - ./backend/.env
@@ -22,9 +25,17 @@ services:
     build:
       context: ./frontend
     container_name: tiersense-frontend
+
     ports:
       - "3000:3000"
+    env_file:
+      - ./frontend/.env.local
+
+    environment:
+      - NEXT_PUBLIC_API_URL=http://10.14.220.29:8000  # Replace with your backend IP
+
     depends_on:
       - backend
-    environment:
-      NODE_ENV: production
+
+volumes:
+  tiersense_logs:
