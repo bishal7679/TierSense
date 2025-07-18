@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   backend:
     build:
@@ -7,10 +9,12 @@ services:
       - "8000:8000"
     privileged: true           # Needed for mount, audit log access
     volumes:
-      - /mnt/nfs_logs:/app/logs
-      - .env:/app/.env   
+      - ${NFS_MOUNT_DIR}:/mnt/nfs              # Dynamically mount NFS from .env
+      - ./logs:/app/logs                       # Persist analysis results
+      - ./backend/.env:/app/.env:ro            # Backend-specific env
     env_file:
       - .env
+      - ./backend/.env
     environment:
       PYTHONUNBUFFERED: "1"
 

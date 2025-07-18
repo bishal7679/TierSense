@@ -34,11 +34,12 @@ filebeat.inputs:
   - type: log
     enabled: true
     paths:
-      - /var/log/audit/audit.log
+      - /mnt/nfs/*.ndjson
     processors:
       - decode_json_fields:
           fields: ["message"]
           target: ""
+          overwrite_keys: true
     multiline.pattern: '^{{'
     multiline.negate: true
     multiline.match: after
