@@ -23,8 +23,8 @@ app.add_middleware(
 )
 
 # Register routes
+app.include_router(configure_monitoring.router)
 app.include_router(run.router, prefix="/api")
-app.include_router(configure_monitoring.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 
 @app.get("/")
