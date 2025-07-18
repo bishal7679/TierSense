@@ -135,63 +135,80 @@ export default function TierSense() {
     if (apiKey) localStorage.setItem("tiersense_api_key", apiKey);
   }, [apiKey]);
 
-  const handleRunAnalysis = async () => {
-    if (!apiKey) {
-      setApiKeyWarning("API Key is required to run analysis.");
-      return;
-    }
-    setApiKeyWarning("");
-    setIsAnalyzing(true); // <-- Start spinner
-    try {
-      const formData = new FormData();
-      formData.append("llm", selectedLLM);
-      formData.append("api_key", apiKey);
-      if (inputSource === "upload") {
-        if (!uploadedFile) {
-          throw new Error("Please select and upload a valid .ndjson file.");
-        }
-        formData.append("file", uploadedFile);
-      }
-      else {
-        formData.append("target_dir", logDirectory || "/logs"); // fallback
-      }
+const handleRunAnalysis = async () => {
+  if (!apiKey) {
+    setApiKeyWarning("API Key is required to run analysis.");
+    return;
+  }
+  setApiKeyWarning("");
+  setIsAnalyzing(true);
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  try {
+    const formData = new FormData();
+    formData.append("llm", selectedLLM);
+    formData.append("api_key", apiKey);
 
-      const response = await fetch(`${apiUrl}/api/run-tiering`, {
-        method: "POST",
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        // Try to parse error message from backend
-        let errorMsg = "Failed to run analysis.";
-        try {
-          const err = await response.json();
-          if (err.detail && typeof err.detail === "string") {
-            errorMsg = err.detail;
-          }
-        } catch {
-          // fallback to status text
-          errorMsg = response.status === 401
-            ? "Invalid API Key."
-            : `HTTP ${response.status}: ${response.statusText}`;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+    if (inputSource === "upload") {
+      if (!uploadedFile) throw new Error("Please select and upload a valid .ndjson file.");
+      formData.append("file", uploadedFile);
+    } else {
+      const dirToMonitor = logDirectory || "/logs";
+      formData.append("target_dir", dirToMonitor);
+
+      // Configure monitoring
+      try {
+        const configResponse = await fetch(`${apiUrl}/configure-monitoring`, {
+          method: "POST",
+          headers: { Accept: "application/json" },
+          body: new URLSearchParams({ target_dir: dirToMonitor }),
+        });
+        if (!configResponse.ok) {
+          const err = await configResponse.json();
+          throw new Error(`Monitoring config failed: ${err.detail || "unknown error"}`);
         }
-        setApiKeyWarning(errorMsg);
+      } catch (monitoringErr) {
+        setApiKeyWarning(
+          monitoringErr instanceof Error ? monitoringErr.message : "Failed to configure monitoring."
+        );
+        setIsAnalyzing(false);
         return;
       }
-
-      const result = await response.json();
-      setResults(result);
-    } catch (error) {
-      setApiKeyWarning(
-        error instanceof Error ? error.message : "Failed to run analysis."
-      );
-      console.error("Failed to fetch:", error);
-    } finally {
-      setIsAnalyzing(false); // <-- Stop spinner
     }
-  };
+
+    const response = await fetch(`${apiUrl}/api/run-tiering`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorMsg = "Failed to run analysis.";
+      try {
+        const err = await response.json();
+        if (err.detail && typeof err.detail === "string") {
+          errorMsg = err.detail;
+        }
+      } catch {
+        errorMsg =
+          response.status === 401
+            ? "Invalid API Key."
+            : `HTTP ${response.status}: ${response.statusText}`;
+      }
+      setApiKeyWarning(errorMsg);
+      return;
+    }
+
+    const result = await response.json();
+    setResults(result);
+  } catch (error) {
+    setApiKeyWarning(error instanceof Error ? error.message : "Failed to run analysis.");
+    console.error("Failed to fetch:", error);
+  } finally {
+    setIsAnalyzing(false);
+  }
+};
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && file.name.endsWith(".ndjson")) {

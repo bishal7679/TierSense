@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from app.routes import run, settings
 from app.config import HEATMAP_PATH  # This will give us the heatmap file path
+from app.routes import configure_monitoring
+
 import os 
 
 app = FastAPI(
@@ -22,6 +24,7 @@ app.add_middleware(
 
 # Register routes
 app.include_router(run.router, prefix="/api")
+app.include_router(configure_monitoring.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 
 @app.get("/")

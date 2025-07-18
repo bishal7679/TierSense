@@ -8,16 +8,17 @@ services:
 
     ports:
       - "8000:8000"
-    privileged: true  # Needed for auditd + filebeat access inside container
+    privileged: true  # Required for auditd/filebeat
 
     volumes:
-      - ${NFS_MOUNT_DIR}:/mnt/nfs                 # NFS mount from host VM1 (specified in .env)
-      - tiersense_logs:/apps/logs                # Persistent logs from analysis
-      - ./backend/.env:/app/.env:ro              # Backend-specific env
+      - ${NFS_MOUNT_DIR}:/mnt/nfs:ro            # NFS mount read-only
+      - logs:/app/logs                          # Persistent logs from analysis
+      - ./backend/.env:/app/.env:ro             # Backend-specific config
 
     env_file:
       - .env
       - ./backend/.env
+
     environment:
       PYTHONUNBUFFERED: "1"
 
@@ -32,10 +33,10 @@ services:
       - ./frontend/.env.local
 
     environment:
-      - NEXT_PUBLIC_API_URL=http://10.14.220.29:8000  # Replace with your backend IP
+      - NEXT_PUBLIC_API_URL=http://localhost:8000  # Frontend connects to backend
 
     depends_on:
       - backend
 
 volumes:
-  tiersense_logs:
+  logs:
