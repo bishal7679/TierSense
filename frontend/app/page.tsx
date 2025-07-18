@@ -157,7 +157,7 @@ export default function TierSense() {
       }
 
       const response = await fetch(
-        "http://backend:8000/api/run-tiering",
+        "http://tiersense-backend:8000/api/run-tiering",
         {
           method: "POST",
           body: formData,
