@@ -1,64 +1,35 @@
-# FROM python:3.12-slim
-
-# ENV DEBIAN_FRONTEND=noninteractive
-
-# WORKDIR /app
-
-# # Copy setup scripts
-# COPY setup_base.sh /setup_base.sh
-# COPY init_runtime.sh /init_runtime.sh
-# RUN chmod +x /setup_base.sh /init_runtime.sh
-
-# # Install Python dependencies
-# COPY requirements.txt .
-# RUN pip install --no-cache-dir -r requirements.txt
-
-# # Copy backend application code
-# COPY . .
-
-# # Expose FastAPI port
-# EXPOSE 8000
-
-# # Run init script which mounts NFS and launches backend
-# CMD ["/init_runtime.sh"]
-
+# Use a slim and official Python base image for a smaller footprint.
 FROM python:3.12-slim
 
-ENV DEBIAN_FRONTEND=noninteractive
-
+# Set the working directory inside the container. All subsequent commands will run from here.
 WORKDIR /app
 
-# --- Install required system packages ---
+# Update package lists and install necessary tools in a single layer to optimize build time.
+# - auditd: Provides the `auditctl` command needed to set monitoring rules on the host.
+# - procps: Provides process utilities, useful for managing services like Filebeat.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget \
-    gnupg \
-    curl \
-    apt-transport-https \
-    software-properties-common \
     auditd \
-    nfs-common \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
-# Add Elastic repo (GPG key + repo) and install Filebeat only once
-RUN curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor -o /usr/share/keyrings/elastic.gpg && \
-    echo "deb [trusted=yes] https://artifacts.elastic.co/packages/7.x/apt stable main" \
-    > /etc/apt/sources.list.d/elastic-7.x.list && \
-    apt-get update && apt-get install -y filebeat rpcbind && \
+# Download and install Filebeat, which will be used to collect and forward audit logs.
+RUN wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor -o /usr/share/keyrings/elastic.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/elastic.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | tee /etc/apt/sources.list.d/elastic-8.x.list && \
+    apt-get update && apt-get install -y filebeat && \
     rm -rf /var/lib/apt/lists/*
 
-# --- Copy app and scripts ---
-COPY setup_base.sh /setup_base.sh
-COPY init_runtime.sh /init_runtime.sh
+# Copy only the requirements file first to leverage Docker's layer caching.
+# This ensures dependencies are only re-installed if the requirements.txt file changes.
 COPY requirements.txt .
-RUN chmod +x /setup_base.sh /init_runtime.sh
-
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Copy the rest of the backend application code into the container.
+COPY ./app /app/app
 
-# Create logs folder
-RUN mkdir -p /app/logs
-
+# Expose the port the FastAPI application will run on, making it accessible from the host.
 EXPOSE 8000
 
-CMD ["/init_runtime.sh"]
+
+# This is the command that will be run when the container starts.
+# It starts Filebeat in the background and then starts the Uvicorn server for the FastAPI app.
+CMD filebeat -e & uvicorn app.main:app --host 0.0.0.0 --port 8000
