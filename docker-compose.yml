@@ -5,20 +5,25 @@ services:
     build:
       context: ./backend
     container_name: tiersense-backend
-
     ports:
       - "8000:8000"
-    privileged: true  # Required for auditd/filebeat
-
+    privileged: true # Required for auditd/filebeat
     volumes:
-      - ${NFS_MOUNT_DIR}:/mnt/nfs:ro            # NFS mount read-only
-      - logs:/app/logs                          # Persistent logs from analysis
-      - ./backend/.env:/app/.env:ro             # Backend-specific config
-
+      # This line mounts the host's entire filesystem into /host-root (read-only)
+      # It allows you to monitor any local directory (e.g., /host-root/home/user/logs)
+      - /:/host-root:ro
+      
+      # This line is for the original NFS functionality
+      - ${NFS_MOUNT_DIR}:/mnt/nfs:ro
+      
+      # Persistent volume for analysis results and logs
+      - logs:/app/logs
+      
+      # Backend-specific environment configuration
+      - ./backend/.env:/app/.env:ro
     env_file:
       - .env
       - ./backend/.env
-
     environment:
       PYTHONUNBUFFERED: "1"
 
@@ -26,15 +31,12 @@ services:
     build:
       context: ./frontend
     container_name: tiersense-frontend
-
     ports:
       - "3000:3000"
     env_file:
       - ./frontend/.env.local
-
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000  # Frontend connects to backend
-
+      - NEXT_PUBLIC_API_URL=http://localhost:8000 # Frontend connects to backend
     depends_on:
       - backend
 

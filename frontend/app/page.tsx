@@ -154,16 +154,20 @@ const handleRunAnalysis = async () => {
       if (!uploadedFile) throw new Error("Please select and upload a valid .ndjson file.");
       formData.append("file", uploadedFile);
     } else {
-      const dirToMonitor = logDirectory || "/logs";
-      formData.append("target_dir", dirToMonitor);
+      const dirToMonitor = logDirectory.trim();
 
+      if (!dirToMonitor) {
+          setApiKeyWarning("Directory path cannot be empty.");
+          setIsAnalyzing(false);
+          return;
+      }
       // Configure monitoring
       try {
         const configResponse = await fetch(`${apiUrl}/configure-monitoring`, {
-          method: "POST",
-          headers: { Accept: "application/json" },
-          body: new URLSearchParams({ target_dir: dirToMonitor }),
-        });
+        method: "POST",
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ target_dir: dirToMonitor }),
+      });
         if (!configResponse.ok) {
           const err = await configResponse.json();
           throw new Error(`Monitoring config failed: ${err.detail || "unknown error"}`);
@@ -382,7 +386,7 @@ const handleRunAnalysis = async () => {
                       <Input
                       id="log-directory"
                       type="text"
-                      placeholder="/mnt/nfs/logs"
+                      placeholder="/host-root/var/log"
                       value={logDirectory}
                       onChange={(e) => {
                         setLogDirectory(e.target.value);
@@ -390,6 +394,9 @@ const handleRunAnalysis = async () => {
                       }}
                       className="mt-1"
                     />
+                    <p className="text-xs text-slate-500 mt-1">
+                      Prefix local paths with /host-root/ (e.g., /host-root/home/user/docs).
+                    </p>
                     </div>
                   )}
                     <div className="flex items-center space-x-2">
