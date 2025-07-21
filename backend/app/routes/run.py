@@ -1,10 +1,6 @@
 # app/routes/run.py
 
-import os
-import tempfile
-from typing import Optional
-
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.core.parser import parse_logs
@@ -17,50 +13,33 @@ router = APIRouter()
 @router.post("/run-tiering")
 async def run_tiering(
     llm: str = Form(...),
-    api_key: str = Form(...),
-    file: Optional[UploadFile] = File(None),
-    target_dir: Optional[str] = Form(None)
+    api_key: str = Form(...)
 ):
-    tmp_path = None
-    os.environ["OPENROUTER_API_KEY"] = api_key
-
+    """
+    Parses the processed logs from the /app/logs directory, generates a heatmap,
+    and gets LLM-powered tiering suggestions.
+    """
     try:
-        # Step 1: Normalize and apply custom prefix
-        if target_dir:
-            clean_dir = target_dir.strip()
-            if not clean_dir.startswith("/"):
-                clean_dir = "/" + clean_dir
-            os.environ["TARGET_LOG_PREFIX"] = clean_dir
-        else:
-            os.environ["TARGET_LOG_PREFIX"] = "/mnt"
-
-        print(f"[INFO] Using target path prefix: {os.environ['TARGET_LOG_PREFIX']}")
-
-        # Step 2: Handle uploaded .ndjson or mounted volume logs
-        if file:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".ndjson") as tmp_file:
-                tmp_file.write(await file.read())
-                tmp_path = tmp_file.name
-            log_path = tmp_path
-        else:
-            log_path = LOG_DIR  # /app/logs
-
-        # Step 3: Parse logs + generate heatmap
-        access_counts, access_times = parse_logs(log_path)
+        # The log path is the directory where Filebeat is configured to save its output.
+        log_directory = LOG_DIR  # This correctly points to "/app/logs"
+        
+        # The parser will scan this directory for all .ndjson files.
+        access_counts, _ = parse_logs(log_directory)
 
         if not access_counts:
-            raise HTTPException(status_code=400, detail="No valid file accesses found in log")
+            raise HTTPException(
+                status_code=400, 
+                detail="No file access events were found. Please interact with files in the monitored directory and try again."
+            )
 
+        # Generate the heatmap based on the parsed access counts.
         generate_heatmap(access_counts)
-
-        # Step 4: Invoke LLM for tiering recommendation
+        
+        # Get the tiering suggestions from the selected LLM.
         result = generate_tiering_suggestions(llm, access_counts, api_key)
-
+        
         return JSONResponse(content=result)
 
     except Exception as e:
+        # Catch any unexpected errors during the process and report them.
         raise HTTPException(status_code=500, detail=str(e))
-
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
