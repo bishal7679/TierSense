@@ -22,7 +22,7 @@ def parse_logs(log_path=None, selected_prefix=None):
         log_files = sorted([
             os.path.join(log_path, f)
             for f in os.listdir(log_path)
-            if f.endswith(".ndjson")
+            if f.endswith(".ndjson") and "tiersense-processed" in f
         ])
     else:
         print(f"[ERROR] Invalid log path: {log_path}")
