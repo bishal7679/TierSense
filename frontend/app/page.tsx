@@ -122,7 +122,7 @@ export default function TierSense() {
   const [showSettings, setShowSettings] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyWarning, setApiKeyWarning] = useState("");
-  const [logDirectory, setLogDirectory] = useState("");
+  const [selectedDirectory, setSelectedDirectory] = useState("");
 
   // Load API key from localStorage on mount
   useEffect(() => {
@@ -147,6 +147,7 @@ const handleRunAnalysis = async () => {
     const formData = new FormData();
     formData.append("llm", selectedLLM);
     formData.append("api_key", apiKey);
+    formData.append("log_directory", selectedDirectory);
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -154,7 +155,7 @@ const handleRunAnalysis = async () => {
       if (!uploadedFile) throw new Error("Please select and upload a valid .ndjson file.");
       formData.append("file", uploadedFile);
     } else {
-      const dirToMonitor = logDirectory.trim();
+      const dirToMonitor = selectedDirectory.trim();
 
       if (!dirToMonitor) {
           setApiKeyWarning("Directory path cannot be empty.");
@@ -382,14 +383,14 @@ const handleRunAnalysis = async () => {
                     
                     {inputSource === "default" && (
                     <div className="mt-2">
-                      <Label htmlFor="log-directory" className="text-sm">Directory Path</Label>
+                      <Label htmlFor="selectedDirectory" className="text-sm">Directory Path</Label>
                       <Input
-                      id="log-directory"
+                      id="selectedDirectory"
                       type="text"
-                      placeholder="/host-root/var/log"
-                      value={logDirectory}
+                      placeholder="/host-root/nfs/logs"
+                      value={selectedDirectory}
                       onChange={(e) => {
-                        setLogDirectory(e.target.value);
+                        setSelectedDirectory(e.target.value);
                         setInputSource("default"); // <-- Fix: ensure radio updates
                       }}
                       className="mt-1"
