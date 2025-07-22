@@ -19,7 +19,7 @@ filebeat.inputs:
 - type: filestream
   enabled: true
   paths:
-    - ${AUDIT_DIRECTORY}/*.log*
+    - /var/log/audit/audit.log
 
 output.file:
   path: "/app/logs"
