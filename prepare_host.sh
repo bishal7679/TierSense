@@ -1,8 +1,3 @@
-#!/bin/bash
-# TierSense Host Preparation Script
-# This script ensures that the necessary host-level dependencies (auditd) are installed and running.
-# It should be run once with sudo before the first 'docker-compose up'.
-
 set -e
 
 echo "[+] Welcome to the TierSense Host Preparation."
