@@ -147,7 +147,13 @@ const handleRunAnalysis = async () => {
     const formData = new FormData();
     formData.append("llm", selectedLLM);
     formData.append("api_key", apiKey);
-    formData.append("log_directory", selectedDirectory);
+
+    const resolvedLogDir = selectedDirectory.startsWith("/host-root/")
+      ? selectedDirectory
+      : `/host-root${selectedDirectory}`;
+
+    formData.append("log_directory", resolvedLogDir);
+    // formData.append("log_directory", selectedDirectory);
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -156,6 +162,9 @@ const handleRunAnalysis = async () => {
       formData.append("file", uploadedFile);
     } else {
       const dirToMonitor = selectedDirectory.trim();
+      const monitorPath = selectedDirectory.startsWith("/host-root/")
+      ? selectedDirectory
+      : `/host-root${selectedDirectory}`;
 
       if (!dirToMonitor) {
           setApiKeyWarning("Directory path cannot be empty.");
@@ -167,7 +176,7 @@ const handleRunAnalysis = async () => {
         const configResponse = await fetch(`${apiUrl}/configure-monitoring`, {
         method: "POST",
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ target_dir: dirToMonitor }),
+        body: new URLSearchParams({ target_dir: monitorPath }),
       });
         if (!configResponse.ok) {
           const err = await configResponse.json();
@@ -391,7 +400,7 @@ const handleRunAnalysis = async () => {
                       value={selectedDirectory}
                       onChange={(e) => {
                         setSelectedDirectory(e.target.value);
-                        setInputSource("default"); // <-- Fix: ensure radio updates
+                        if (inputSource !== "default") setInputSource("default");
                       }}
                       className="mt-1"
                     />

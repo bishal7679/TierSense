@@ -1,19 +1,18 @@
 #!/bin/bash
-# Script to manage auditd rules from inside the container (via mounted host)
+# tiersense_audit_config.sh
 
-ACTION="$1"
-DIR="$2"
+ACTION=$1
+WATCH_DIR=$2
 
-if [[ "$ACTION" == "add" && -n "$DIR" ]]; then
-    auditctl -D
-    auditctl -a always,exit -F dir="$DIR" -F perm=rwxa -F auid>=1000 -F auid!=4294967295 -k tiersense
-    echo "Audit rule added for directory: $DIR"
-elif [[ "$ACTION" == "clear" ]]; then
-    auditctl -D
-    echo "Audit rules cleared"
+AUDIT_RULE="always,exit -F dir=${WATCH_DIR} -F perm=rwa -F key=tiersense_monitoring"
+
+if [[ "$ACTION" == "add" ]]; then
+    sudo auditctl -a $AUDIT_RULE
+    echo "[INFO] Added audit rule for $WATCH_DIR"
+elif [[ "$ACTION" == "remove" ]]; then
+    sudo auditctl -d $AUDIT_RULE
+    echo "[INFO] Removed audit rule for $WATCH_DIR"
 else
-    echo "Usage:"
-    echo "  $0 add /path/to/monitor"
-    echo "  $0 clear"
+    echo "Usage: $0 {add|remove} /path/to/dir"
     exit 1
 fi
