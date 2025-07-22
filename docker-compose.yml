@@ -7,31 +7,31 @@ services:
     container_name: tiersense-backend
     ports:
       - "8000:8000"
-    
-    # These security settings are required for the container to control the host's auditd service.
+
     privileged: true
     security_opt:
       - "apparmor=unconfined"
-      
+
     volumes:
-      # Mounts the host's filesystem so the container can see the files to monitor.
+      # Mount full host root for analysis (read-only)
       - /:/host-root:ro
       
-      # Mounts the host's audit logs so Filebeat inside the container can read them.
+      # Mount auditd logs for Filebeat inside container
       - /var/log/audit:/var/log/audit:ro
-      
-      # This line is for the original NFS functionality (optional)
+
+      # Mount NFS directory (user-provided in .env)
       - ${NFS_MOUNT_DIR}:/mnt/nfs:ro
-      
-      # Persistent volume for storing processed logs and heatmaps.
+
+      # Persistent volume for logs and heatmap
       - logs:/app/logs
-      
-      # Backend-specific environment configuration
+
+      # Read-only backend environment config
       - ./backend/.env:/app/.env:ro
-      
+
     env_file:
       - .env
       - ./backend/.env
+
     environment:
       PYTHONUNBUFFERED: "1"
 
@@ -44,7 +44,7 @@ services:
     env_file:
       - ./frontend/.env.local
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000 # Frontend connects to backend
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
     depends_on:
       - backend
 

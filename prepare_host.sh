@@ -1,46 +1,53 @@
-set -e
+#!/bin/bash
 
-echo "[+] Welcome to the TierSense Host Preparation."
-echo "[+] This script will check for and install the 'auditd' service, which is required for file monitoring."
+echo "[*] Starting host preparation for TierSense..."
 
-# --- Check for root/sudo privileges ---
-if [ "$EUID" -ne 0 ]; then
-  echo "[!] Please run this script with sudo: sudo ./prepare_host.sh"
-  exit 1
+# 1. Install auditd if not present
+if ! command -v auditctl &> /dev/null; then
+    echo "[+] Installing auditd..."
+    sudo apt-get update && sudo apt-get install -y auditd
+else
+    echo "[*] auditd already installed."
 fi
 
-# --- Detect Package Manager and Install auditd ---
-if command -v apt-get &> /dev/null; then
-    # Debian/Ubuntu
-    echo "[i] Detected Debian/Ubuntu based system."
-    echo "[+] Installing auditd and enabling the service..."
-    apt-get update
-    apt-get install -y auditd audispd-plugins
-    systemctl enable auditd --now
-elif command -v yum &> /dev/null; then
-    # CentOS/RHEL
-    echo "[i] Detected RHEL/CentOS based system."
-    echo "[+] Installing auditd and enabling the service..."
-    yum install -y audit
-    systemctl enable auditd --now
-elif command -v dnf &> /dev/null; then
-    # Fedora
-    echo "[i] Detected Fedora based system."
-    echo "[+] Installing auditd and enabling the service..."
-    dnf install -y audit
-    systemctl enable auditd --now
+# 2. Ensure auditd is running
+echo "[+] Ensuring auditd is enabled and running..."
+sudo systemctl enable auditd
+sudo systemctl start auditd
+
+# 3. Create tiersense_audit_config.sh
+AUDIT_HELPER_SCRIPT="/usr/local/bin/tiersense_audit_config.sh"
+
+if [[ ! -f "$AUDIT_HELPER_SCRIPT" ]]; then
+    echo "[+] Creating audit configuration helper script at $AUDIT_HELPER_SCRIPT"
+    sudo tee "$AUDIT_HELPER_SCRIPT" > /dev/null << 'EOF'
+#!/bin/bash
+ACTION="$1"
+DIR="$2"
+
+if [[ "$ACTION" == "add" && -n "$DIR" ]]; then
+    sudo auditctl -D
+    sudo auditctl -a always,exit -F dir="$DIR" -F perm=rwxa -F auid>=1000 -F auid!=4294967295 -k tiersense
+    echo "[✓] Audit rule added for directory: $DIR"
+elif [[ "$ACTION" == "clear" ]]; then
+    sudo auditctl -D
+    echo "[✓] All audit rules cleared."
 else
-    echo "[✗] ERROR: Could not detect a supported package manager (apt, yum, dnf)."
-    echo "[!] Please manually install 'auditd' on your system and ensure the service is running."
+    echo "Usage: $0 add <directory> | clear"
     exit 1
 fi
-
-# --- Verify Service Status ---
-if systemctl is-active --quiet auditd; then
-    echo "[✓] The auditd service is now active and running."
-    echo "[✓] Host preparation complete! You can now run 'docker-compose up --build'."
+EOF
+    sudo chmod +x "$AUDIT_HELPER_SCRIPT"
 else
-    echo "[✗] ERROR: The auditd service failed to start."
-    echo "[!] Please check the service status with 'sudo systemctl status auditd'."
-    exit 1
+    echo "[*] Audit helper script already exists at $AUDIT_HELPER_SCRIPT"
 fi
+
+# 4. Add sudo NOPASSWD access for this script
+if ! sudo grep -q "tiersense_audit_config.sh" /etc/sudoers; then
+    echo "[+] Adding NOPASSWD sudo rule for audit config script..."
+    echo "$(whoami) ALL=(ALL) NOPASSWD: $AUDIT_HELPER_SCRIPT" | sudo tee -a /etc/sudoers > /dev/null
+else
+    echo "[*] NOPASSWD rule for audit script already exists."
+fi
+
+echo "[✓] Host preparation complete."

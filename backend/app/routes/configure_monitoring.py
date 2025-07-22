@@ -4,31 +4,49 @@ from fastapi import APIRouter, Form, HTTPException
 
 router = APIRouter()
 
+AUDIT_HELPER = "/usr/local/bin/tiersense_audit_config.sh"
+
 @router.post("/configure-monitoring")
 async def configure_monitoring(target_dir: str = Form(...)):
-    """Sets an auditd rule on the host to monitor the specified directory."""
+    """
+    Set auditd monitoring on the specified directory by calling a host-level helper script.
+    The directory path is received in container-space (/host-root/...), and mapped to host-space.
+    """
     target_dir = target_dir.strip()
 
-    # The path provided by the user (e.g., /host-root/home/user) is the path *inside the container*.
-    # We must translate this to the actual path on the host for the auditd rule by removing the prefix.
+    # 1. Verify the container-level path exists
+    if not os.path.exists(target_dir):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Path not found inside container: '{target_dir}'. Ensure it is mounted correctly."
+        )
+
+    # 2. Translate to actual host path by stripping the /host-root prefix
     host_path = target_dir.replace("/host-root", "", 1)
 
-    # Reliability Check: Verify the path exists inside the container before proceeding.
-    if not os.path.exists(target_dir):
-        raise HTTPException(status_code=404, detail=f"Path not found inside container: '{target_dir}'. Please ensure the path is correct and accessible.")
+    # 3. Ensure the helper script exists
+    if not os.path.exists(AUDIT_HELPER):
+        raise HTTPException(
+            status_code=500,
+            detail=f"Audit configuration helper script missing at {AUDIT_HELPER}."
+        )
 
     try:
-        # Define the unique key that the parser will look for.
-        rule_key = "tiersense_monitoring"
-        
-        # Clear all previous audit rules to ensure a clean state for the new analysis.
-        subprocess.run(["auditctl", "-D"], check=True, capture_output=True)
-        
-        # Add the new rule with the correct key to watch the specified host path for read, write, execute, and attribute changes.
-        rule = f"-w {host_path} -p rwxa -k {rule_key}"
-        subprocess.run(["auditctl"] + rule.split(), check=True, capture_output=True, text=True)
-        
-        return {"status": "success", "message": f"Monitoring configured for host path: {host_path}"}
+        # 4. Call the host audit helper script with sudo
+        result = subprocess.run(
+            ["sudo", AUDIT_HELPER, "add", host_path],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return {
+            "status": "success",
+            "message": f"Auditd monitoring configured for host path: {host_path}",
+            "stdout": result.stdout.strip()
+        }
+
     except subprocess.CalledProcessError as e:
-        error_message = e.stderr.decode().strip() if e.stderr else "Unknown error from auditctl."
-        raise HTTPException(status_code=500, detail=f"Failed to apply audit rule: {error_message}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Audit configuration failed: {e.stderr.strip() if e.stderr else 'Unknown error'}"
+        )
