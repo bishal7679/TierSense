@@ -14,31 +14,37 @@ async def configure_monitoring(target_dir: str = Form(...)):
     """
     target_dir = target_dir.strip()
 
-    # 1. Verify the container-level path exists
+    # 1. Check if path exists inside container
     if not os.path.exists(target_dir):
         raise HTTPException(
             status_code=404,
             detail=f"Path not found inside container: '{target_dir}'. Ensure it is mounted correctly."
         )
 
-    # 2. Translate to actual host path by stripping the /host-root prefix
+    # 2. Convert container path (/host-root/...) → host path (/...)
+    if not target_dir.startswith("/host-root"):
+        raise HTTPException(
+            status_code=400,
+            detail="Expected path to start with /host-root (container-mounted host directory)."
+        )
     host_path = target_dir.replace("/host-root", "", 1)
 
-    # 3. Ensure the helper script exists
+    # 3. Check helper script exists
     if not os.path.exists(AUDIT_HELPER):
         raise HTTPException(
             status_code=500,
-            detail=f"Audit configuration helper script missing at {AUDIT_HELPER}."
+            detail=f"Audit configuration helper script not found at {AUDIT_HELPER}"
         )
 
+    # 4. Run the script without sudo (inside container)
     try:
-        # 4. Call the host audit helper script with sudo
         result = subprocess.run(
-            ["sudo", AUDIT_HELPER, "add", host_path],
+            ["bash", AUDIT_HELPER, "add", host_path],
             capture_output=True,
             text=True,
             check=True
         )
+
         return {
             "status": "success",
             "message": f"Auditd monitoring configured for host path: {host_path}",
