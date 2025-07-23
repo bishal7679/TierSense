@@ -20,10 +20,17 @@ filebeat.inputs:
   enabled: true
   paths:
     - /var/log/audit/audit.log
+  parsers:
+    - multiline:
+        type: pattern
+        pattern: '^\\s*type='
+        negate: true
+        match: after
 
 output.file:
   path: "/app/logs"
   filename: "tiersense-processed.ndjson"
+
 path.data: /var/lib/filebeat
 EOF
 
