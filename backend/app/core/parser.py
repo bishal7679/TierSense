@@ -5,17 +5,17 @@ from collections import defaultdict
 
 def parse_logs(log_path=None, selected_prefix=None):
     access_counts = defaultdict(int)
-    access_times = defaultdict(list) # Kept for consistent function signature, though not used in this version.
+    access_times = defaultdict(list)  # Kept for consistency if you plan to use it later.
     total_good, total_bad = 0, 0
 
-    # This logic correctly finds the log directory.
+    # Default to environment variable LOG_DIR or /app/logs if not provided
     log_path = log_path or os.getenv("LOG_DIR", "/app/logs")
     
     if not os.path.exists(log_path):
         print(f"[ERROR] Log path does not exist: {log_path}")
         return {}, {}
 
-    # This logic correctly handles finding all .ndjson files in the directory.
+    # Get log files based on whether log_path is a file or directory
     if os.path.isfile(log_path):
         log_files = [log_path]
     elif os.path.isdir(log_path):
@@ -36,32 +36,30 @@ def parse_logs(log_path=None, selected_prefix=None):
 
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
-                # --- START OF CORRECTED LOGIC ---
                 try:
-                    # Each line from Filebeat is a JSON object.
+                    # Parse JSON entry
                     log_entry = json.loads(line)
                     message = log_entry.get("message", "")
 
-                    # We only care about logs that contain our specific monitoring key.
-                    if not re.search(r'key="?tiersense_monitoring"?', message):
-                        continue # Skip lines that are not relevant to our monitoring.
+                    # Match logs with the specific monitoring key
+                    if not re.search(r'key\s*=?\s*"?tiersense_monitoring"?', message):
+                        continue  # Skip irrelevant logs
 
-                    # Extract the full, absolute path of the file that was accessed.
-                    # Must contain both our audit key and a valid path
-                    if 'key="tiersense_monitoring"' in message:
-                        path_matches = re.findall(r'name="([^"]+)"', message)
-                        for p in path_matches:
-                            full_path = os.path.normpath(p)
-                            if '.' in os.path.basename(full_path) or not full_path.endswith('/'):
-                                access_counts[full_path] += 1
-                                good += 1
+                    # Extract file paths and filter based on criteria
+                    path_matches = re.findall(r'name="([^"]+)"', message)
+                    for p in path_matches:
+                        full_path = os.path.normpath(p)
+                        
+                        # Only count files with extensions or directories
+                        if '.' in os.path.basename(full_path) or not full_path.endswith('/'):
+                            access_counts[full_path] += 1
+                            good += 1
 
-
-                except (json.JSONDecodeError, AttributeError):
-                    # This will safely ignore any lines that are not valid JSON.
+                except (json.JSONDecodeError, AttributeError) as e:
+                    # Log error for debugging skipped entries
+                    print(f"[ERROR] Skipped line due to error: {e}")
                     bad += 1
                     continue
-                # --- END OF CORRECTED LOGIC ---
 
         total_good += good
         total_bad += bad
