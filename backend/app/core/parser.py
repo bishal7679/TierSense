@@ -47,15 +47,15 @@ def parse_logs(log_path=None, selected_prefix=None):
                         continue # Skip lines that are not relevant to our monitoring.
 
                     # Extract the full, absolute path of the file that was accessed.
-                    path_match = re.search(r'name="([^"]+)"', message)
-                    
-                    if path_match:
-                        full_path = os.path.normpath(path_match.group(1))
-                        
-                        # A simple check to ensure we are counting files, not directories.
-                        if '.' in os.path.basename(full_path) or not full_path.endswith('/'):
-                            access_counts[full_path] += 1
-                            good += 1
+                    # Must contain both our audit key and a valid path
+                    if 'key="tiersense_monitoring"' in message:
+                        path_matches = re.findall(r'name="([^"]+)"', message)
+                        for p in path_matches:
+                            full_path = os.path.normpath(p)
+                            if '.' in os.path.basename(full_path) or not full_path.endswith('/'):
+                                access_counts[full_path] += 1
+                                good += 1
+
 
                 except (json.JSONDecodeError, AttributeError):
                     # This will safely ignore any lines that are not valid JSON.
