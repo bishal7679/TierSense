@@ -5,17 +5,17 @@ from collections import defaultdict
 
 def parse_logs(log_path=None, selected_prefix=None):
     access_counts = defaultdict(int)
-    access_times = defaultdict(list)  # Kept for consistency if you plan to use it later.
+    access_times = defaultdict(list)  # Reserved for future use
     total_good, total_bad = 0, 0
 
-    # Default to environment variable LOG_DIR or /app/logs if not provided
+    # Use provided path or environment fallback
     log_path = log_path or os.getenv("LOG_DIR", "/app/logs")
-    
+
     if not os.path.exists(log_path):
         print(f"[ERROR] Log path does not exist: {log_path}")
         return {}, {}
 
-    # Get log files based on whether log_path is a file or directory
+    # Detect log files
     if os.path.isfile(log_path):
         log_files = [log_path]
     elif os.path.isdir(log_path):
@@ -37,28 +37,32 @@ def parse_logs(log_path=None, selected_prefix=None):
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
                 try:
-                    # Parse JSON entry
                     log_entry = json.loads(line)
                     message = log_entry.get("message", "")
 
-                    # Match logs with the specific monitoring key
+                    # Filter logs by audit key
                     if not re.search(r'key\s*=?\s*"?tiersense_monitoring"?', message):
-                        continue  # Skip irrelevant logs
+                        if os.getenv("DEBUG_PARSER") == "1":
+                            print("[DEBUG] Skipping log, no tiersense_monitoring key:", message[:200])
+                        continue
 
-                    # Extract file paths and filter based on criteria
-                    path_matches = re.findall(r'name="([^"]+)"', message)
+                    # Extract paths using safe regex (handles escaped quotes)
+                    path_matches = re.findall(r'name="((?:\\.|[^"\\])*)"', message)
+                    if os.getenv("DEBUG_PARSER") == "1":
+                        print(f"[DEBUG] Matched paths: {path_matches}")
+
                     for p in path_matches:
                         full_path = os.path.normpath(p)
-                        
-                        # Only count files with extensions or directories
+
+                        # Count only files or leaf paths (not trailing '/')
                         if '.' in os.path.basename(full_path) or not full_path.endswith('/'):
                             access_counts[full_path] += 1
                             good += 1
 
                 except (json.JSONDecodeError, AttributeError) as e:
-                    # Log error for debugging skipped entries
-                    print(f"[ERROR] Skipped line due to error: {e}")
                     bad += 1
+                    if os.getenv("DEBUG_PARSER") == "1":
+                        print(f"[ERROR] Skipped line due to error: {e}")
                     continue
 
         total_good += good
@@ -66,4 +70,14 @@ def parse_logs(log_path=None, selected_prefix=None):
         print(f"[INFO] File done: {good} valid entries, {bad} skipped.")
 
     print(f"[RESULT] Total files parsed: {len(log_files)} | Total good: {total_good}, bad: {total_bad}")
+
+    if total_good == 0:
+        print("[WARN] No valid audit entries found with 'tiersense_monitoring'.")
+        print("       You can debug with: DEBUG_PARSER=1 python3 parser.py")
+        print("       Or run: sudo ausearch -k tiersense_monitoring")
+
     return access_counts, access_times
+
+# Optional direct run
+if __name__ == "__main__":
+    parse_logs()
