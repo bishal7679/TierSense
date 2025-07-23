@@ -27,6 +27,12 @@ filebeat.inputs:
         negate: true
         match: after
 
+processors:
+  - dissect:
+      tokenizer: "%{message}"
+      field: "message"
+      target_prefix: ""
+
 output.file:
   path: "/app/logs"
   filename: "tiersense-processed.ndjson"
