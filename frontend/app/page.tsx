@@ -148,14 +148,14 @@ const handleRunAnalysis = async () => {
     formData.append("llm", selectedLLM);
     formData.append("api_key", apiKey);
 
-    const resolvedLogDir = selectedDirectory.startsWith("/host-root/")
-      ? selectedDirectory
-      : `/host-root${selectedDirectory}`;
-
-    formData.append("log_directory", resolvedLogDir);
-    // formData.append("log_directory", selectedDirectory);
-
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+    // const resolvedLogDir = selectedDirectory.startsWith("/host-root/")
+    //   ? selectedDirectory
+    //   : `/host-root${selectedDirectory}`;
+
+    // formData.append("log_directory", resolvedLogDir);
+    // // formData.append("log_directory", selectedDirectory);
 
     if (inputSource === "upload") {
       if (!uploadedFile) throw new Error("Please select and upload a valid .ndjson file.");
@@ -190,6 +190,8 @@ const handleRunAnalysis = async () => {
         return;
       }
     }
+
+    formData.append("log_directory", "/app/logs");
 
     const response = await fetch(`${apiUrl}/api/run-tiering`, {
       method: "POST",
