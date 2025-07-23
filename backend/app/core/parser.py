@@ -80,4 +80,6 @@ def parse_logs(log_path=None, selected_prefix=None):
 
 # Optional direct run
 if __name__ == "__main__":
-    parse_logs()
+    import sys
+    path_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    parse_logs(log_path=path_arg)
