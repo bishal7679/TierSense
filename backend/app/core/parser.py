@@ -43,7 +43,7 @@ def parse_logs(log_path=None, selected_prefix=None):
                     message = log_entry.get("message", "")
 
                     # We only care about logs that contain our specific monitoring key.
-                    if 'key="tiersense_monitoring"' not in message:
+                    if not re.search(r'key="?tiersense_monitoring"?', message):
                         continue # Skip lines that are not relevant to our monitoring.
 
                     # Extract the full, absolute path of the file that was accessed.
