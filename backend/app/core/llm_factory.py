@@ -1,76 +1,94 @@
-import os, json, re
-from typing import Dict, Any
+import os
+import json
+import re
 from app.core.llms import gemini, gpt, claude, llama, deepseek
 
 LLM_DISPATCH = {
     "gemini": gemini.generate,
     "gpt": gpt.generate,
     "openai": gpt.generate,
-    "openrouter": gpt.generate,
     "claude": claude.generate,
-    "ollama": llama.generate,
     "llama": llama.generate,
     "deepseek": deepseek.generate,
 }
 
-def generate_tiering_suggestions(
-    llm_type: str,
-    access_counts: Dict[str, int],
-    api_key: str = None
-) -> Dict[str, Any]:
+def _extract_json_from_response(raw_text: str) -> dict:
+    """
+    A robust function to find and parse a JSON object from a raw text response.
+    It handles markdown code fences (```json ... ```) and other surrounding text.
+    """
+    # Find the start of the JSON object
+    json_start_index = raw_text.find('{')
+    if json_start_index == -1:
+        raise ValueError("LLM response did not contain a valid JSON object.")
+
+    # Find the end of the JSON object by matching braces
+    json_end_index = -1
+    open_braces = 0
+    for i, char in enumerate(raw_text[json_start_index:]):
+        if char == '{':
+            open_braces += 1
+        elif char == '}':
+            open_braces -= 1
+        
+        if open_braces == 0:
+            json_end_index = json_start_index + i + 1
+            break
+    
+    if json_end_index == -1:
+        raise ValueError("LLM response contained an incomplete JSON object.")
+
+    # Extract the JSON string and parse it
+    json_string = raw_text[json_start_index:json_end_index]
+    try:
+        return json.loads(json_string)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Failed to parse extracted JSON: {e}")
+
+
+def generate_tiering_suggestions(llm_type: str, access_counts: dict, api_key: str = None) -> dict:
     llm_type = llm_type.lower()
     if llm_type not in LLM_DISPATCH:
         raise ValueError(f"Unsupported LLM type: {llm_type}")
 
-    # 1. Invoke LLM
-    print(f"[+] Invoking LLM: {llm_type}")
-    raw_output = LLM_DISPATCH[llm_type](access_counts, api_key)
-    print(f"[DEBUG] Raw LLM output:\n{raw_output}")
-
-    # 2. Strip markdown code fences
-    cleaned = re.sub(r'^\s*```', '', raw_output.strip(), flags=re.MULTILINE)
-    cleaned = re.sub(r"\s*```$", "", cleaned.strip(), flags=re.MULTILINE)
-
-    # 3. Extract first {...} JSON block if extra text remains
-    match = re.search(r"(\{.*\})", cleaned, flags=re.DOTALL)
-    if match:
-        cleaned = match.group(1).strip()
-
-    # 4. Parse JSON
     try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError as e:
-        snippet = cleaned[:200].replace("\n", " ")
-        print(f"[!] Failed to parse JSON ({e}): {snippet!r}")
-        raise ValueError(f"LLM returned invalid JSON format: {e}")
+        print(f"[+] Invoking LLM: {llm_type}")
+        raw_output = LLM_DISPATCH[llm_type](access_counts, api_key)
 
-    # 5. Validate structure
-    if not isinstance(parsed, dict):
-        raise ValueError(f"Expected JSON object, got {type(parsed).__name__}")
+        # Use the new, robust function to clean and parse the output
+        parsed_json = _extract_json_from_response(raw_output)
 
-    # 6. Build summary and analysis
-    normalized_counts = {os.path.normpath(p): cnt for p, cnt in access_counts.items()}
-    summary = {"total_files": 0, "hot_tier": 0, "warm_tier": 0, "cold_tier": 0}
-    analysis = []
+        summary = {"total_files": 0, "hot_tier": 0, "warm_tier": 0, "cold_tier": 0}
+        analysis = []
 
-    for raw_path, raw_tier in parsed.items():
-        path = os.path.normpath(raw_path if raw_path.startswith("/") else f"/{raw_path}")
-        tier = raw_tier.strip().upper()
-        if tier not in ("HOT", "WARM", "COLD"):
-            raise ValueError(f"Invalid tier '{raw_tier}' for path '{path}'")
+        normalized_counts = {os.path.normpath(k): v for k, v in access_counts.items()}
 
-        freq = normalized_counts.get(path, "unknown")
-        summary["total_files"] += 1
-        summary[f"{tier.lower()}_tier"] += 1
+        for path, tier in parsed_json.items():
+            normalized_path = os.path.normpath(path)
+            frequency = normalized_counts.get(normalized_path, "unknown")
 
-        analysis.append({
-            "path": path,
-            "tier": tier,
-            "score": 0.0,
-            "access_frequency": freq
-        })
+            tier_upper = tier.strip().upper()
+            summary["total_files"] += 1
+            if tier_upper == "HOT":
+                summary["hot_tier"] += 1
+            elif tier_upper == "WARM":
+                summary["warm_tier"] += 1
+            elif tier_upper == "COLD":
+                summary["cold_tier"] += 1
 
-    # 7. Sort analysis by descending access count
-    analysis.sort(key=lambda x: normalized_counts.get(x["path"], 0), reverse=True)
+            analysis.append({
+                "path": normalized_path,
+                "tier": tier_upper,
+                "access_frequency": frequency
+            })
 
-    return {"summary": summary, "analysis": analysis}
+        return {
+            "summary": summary,
+            "analysis": analysis
+        }
+
+    except Exception as e:
+        print(f"[!] Error during tiering suggestion: {e}")
+        # Re-raise as a runtime error to be caught by the API route
+        raise RuntimeError(f"LLM processing failed: {e}")
+
