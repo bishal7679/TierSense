@@ -51,7 +51,7 @@ def parse_logs(log_path=None, selected_prefix=None):
         # Process buffered events
         for event_lines in event_buffer.values():
             # Check if any line contains the tiersense_monitoring key
-            if not any(AUDIT_KEY in line for line in event_lines):
+            if not any(re.search(r'key\s*=\s*"?tiersense_monitoring"?', line) for line in event_lines):
                 continue
 
             paths = []
@@ -64,7 +64,7 @@ def parse_logs(log_path=None, selected_prefix=None):
 
             for p in paths:
                 full_path = os.path.normpath(p)
-                if '.' in os.path.basename(full_path) or not full_path.endswith('/'):
+                if full_path:
                     access_counts[full_path] += 1
                     good += 1
 

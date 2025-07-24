@@ -32,14 +32,14 @@ if [[ "$ACTION" == "add" || "$ACTION" == "remove" ]]; then
 
     elif [[ "$ACTION" == "remove" ]]; then
         echo "[INFO] Removing audit rule for ${WATCH_DIR}..."
-        auditctl -d $AUDIT_RULE
-        echo "[✓] Audit rule removed."
+        # auditctl -d $AUDIT_RULE
+        # echo "[✓] Audit rule removed."
     fi
 
 elif [[ "$ACTION" == "clear" ]]; then
     echo "[INFO] Clearing all audit rules..."
-    auditctl -D
-    echo "[✓] All audit rules cleared."
+    # auditctl -D
+    # echo "[✓] All audit rules cleared."
 
 else
     usage

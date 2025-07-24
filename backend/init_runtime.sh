@@ -18,9 +18,12 @@ filebeat.inputs:
         negate: true
         match: after
         max_lines: 5000
+        timeout: 2s
   fields:
     type: auditd
-  multiline.timeout: 2s
+  ignore_older: 10m
+  close_inactive: 5m
+  scan_frequency: 10s
 
 output.file:
   path: "/app/logs"
