@@ -18,7 +18,7 @@ filebeat.autodiscover:
       hints.enabled: false
 
 filebeat.config.modules:
-  path: ${path.config}/modules.d/*.yml
+  path: \${path.config}/modules.d/*.yml
   reload.enabled: false
 
 output.file:
