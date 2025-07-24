@@ -1,53 +1,71 @@
 #!/bin/bash
 
+set -e
+
 echo "[*] Starting host preparation for TierSense..."
 
-# 1. Install auditd if not present
-if ! command -v auditctl &> /dev/null; then
+# 1. Ensure auditd is installed
+if ! command -v auditctl &>/dev/null; then
     echo "[+] Installing auditd..."
     sudo apt-get update && sudo apt-get install -y auditd
 else
     echo "[*] auditd already installed."
 fi
 
-# 2. Ensure auditd is running
+# 2. Enable and start auditd service
 echo "[+] Ensuring auditd is enabled and running..."
 sudo systemctl enable auditd
-sudo systemctl start auditd
+sudo systemctl restart auditd
 
-# 3. Create tiersense_audit_config.sh
+# 3. Create the audit config helper script
 AUDIT_HELPER_SCRIPT="/usr/local/bin/tiersense_audit_config.sh"
 
 if [[ ! -f "$AUDIT_HELPER_SCRIPT" ]]; then
-    echo "[+] Creating audit configuration helper script at $AUDIT_HELPER_SCRIPT"
+    echo "[+] Creating helper script: $AUDIT_HELPER_SCRIPT"
     sudo tee "$AUDIT_HELPER_SCRIPT" > /dev/null << 'EOF'
 #!/bin/bash
-ACTION="$1"
-DIR="$2"
 
-if [[ "$ACTION" == "add" && -n "$DIR" ]]; then
-    sudo auditctl -D
-    sudo auditctl -a always,exit -F dir="$DIR" -F perm=rwxa -F auid>=1000 -F auid!=4294967295 -k tiersense
-    echo "[✓] Audit rule added for directory: $DIR"
+ACTION="$1"
+TARGET_DIR="$2"
+RULES_FILE="/etc/audit/rules.d/tiersense.rules"
+KEY="tiersense_monitoring"
+
+if [[ "$ACTION" == "add" && -n "$TARGET_DIR" ]]; then
+    echo "[+] Adding persistent audit rule for $TARGET_DIR"
+
+    # Add rule to rules.d
+    echo "-w $TARGET_DIR -p rwxa -k $KEY" | sudo tee "$RULES_FILE" > /dev/null
+
+    # Reload auditd rules safely
+    sudo augenrules --load
+    sudo systemctl restart auditd
+
+    echo "[✓] Rule added and loaded for: $TARGET_DIR"
+
 elif [[ "$ACTION" == "clear" ]]; then
-    sudo auditctl -D
-    echo "[✓] All audit rules cleared."
+    echo "[+] Clearing TierSense audit rule..."
+    sudo rm -f "$RULES_FILE"
+    sudo augenrules --load
+    sudo systemctl restart auditd
+    echo "[✓] TierSense audit rules removed."
+
 else
     echo "Usage: $0 add <directory> | clear"
     exit 1
 fi
 EOF
+
     sudo chmod +x "$AUDIT_HELPER_SCRIPT"
 else
     echo "[*] Audit helper script already exists at $AUDIT_HELPER_SCRIPT"
 fi
 
-# 4. Add sudo NOPASSWD access for this script
+# 4. Add sudo NOPASSWD rule for the script if not present
 if ! sudo grep -q "tiersense_audit_config.sh" /etc/sudoers; then
-    echo "[+] Adding NOPASSWD sudo rule for audit config script..."
+    echo "[+] Adding NOPASSWD rule for audit helper script..."
     echo "$(whoami) ALL=(ALL) NOPASSWD: $AUDIT_HELPER_SCRIPT" | sudo tee -a /etc/sudoers > /dev/null
 else
-    echo "[*] NOPASSWD rule for audit script already exists."
+    echo "[*] NOPASSWD rule already present."
 fi
 
 echo "[✓] Host preparation complete."
