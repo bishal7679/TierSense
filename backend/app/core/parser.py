@@ -8,6 +8,7 @@ def parse_logs(log_path=None, selected_prefix=None):
     total_good, total_bad = 0, 0
 
     log_path = log_path or os.getenv("LOG_DIR", "/app/logs")
+    print(f"[INFO] Parsing logs from: {log_path}")
 
     if not os.path.exists(log_path):
         print(f"[ERROR] Log path does not exist: {log_path}")
