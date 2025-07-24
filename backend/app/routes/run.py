@@ -12,38 +12,29 @@ router = APIRouter()
 async def run_tiering(
     llm: str = Form(...),
     api_key: str = Form(...),
-    log_directory: str = Form(None)
+    directory: str = Form(None),
 ):
-    """
-    Parses logs from a directory (UI-provided or fallback),
-    generates a heatmap, and returns LLM-based tiering advice.
-    """
-    try:
-        # Determine directory to parse
-        target_directory = log_directory.strip() if log_directory else LOG_DIR
-        target_directory = os.path.abspath(target_directory)
+    # Determine directory
+    target = directory.strip() if directory else LOG_DIR
+    target = os.path.realpath(target)
 
-        if not os.path.exists(target_directory):
-            raise HTTPException(status_code=400, detail=f"Directory not found: {target_directory}")
+    if not os.path.isdir(target):
+        raise HTTPException(400, f"Directory not found: {target}")
 
-        # Parse logs
-        access_counts, _ = parse_logs(target_directory)
+    # Parse logs (returns only access_counts)
+    access_counts = parse_logs(target)
 
-        if not access_counts:
-            raise HTTPException(
-                status_code=400,
-                detail="No file access events found in logs. Interact with files and try again."
-            )
+    if not access_counts:
+        raise HTTPException(400, "No file access events found in logs. Interact with files and try again.")
 
-        # Generate heatmap
-        generate_heatmap(access_counts)
+    # Generate heatmap and capture its path
+    heatmap_path = generate_heatmap(access_counts)
 
-        # Get LLM output
-        result = generate_tiering_suggestions(llm, access_counts, api_key)
+    # Call LLM for tiering suggestions
+    suggestions = generate_tiering_suggestions(llm, access_counts, api_key)
 
-        return JSONResponse(content=result)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+    # Return combined response
+    return JSONResponse(content={
+        "heatmap": heatmap_path,
+        "tiers": suggestions,
+    })
