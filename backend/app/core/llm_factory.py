@@ -1,6 +1,5 @@
-import os
-import json
-import re
+import os, json, re
+from typing import Dict, Any
 from app.core.llms import gemini, gpt, claude, llama, deepseek
 
 LLM_DISPATCH = {
@@ -14,54 +13,64 @@ LLM_DISPATCH = {
     "deepseek": deepseek.generate,
 }
 
-def generate_tiering_suggestions(llm_type: str, access_counts: dict, api_key: str = None) -> dict:
+def generate_tiering_suggestions(
+    llm_type: str,
+    access_counts: Dict[str, int],
+    api_key: str = None
+) -> Dict[str, Any]:
     llm_type = llm_type.lower()
     if llm_type not in LLM_DISPATCH:
         raise ValueError(f"Unsupported LLM type: {llm_type}")
 
+    # 1. Invoke LLM
+    print(f"[+] Invoking LLM: {llm_type}")
+    raw_output = LLM_DISPATCH[llm_type](access_counts, api_key)
+    print(f"[DEBUG] Raw LLM output:\n{raw_output}")
+
+    # 2. Strip markdown code fences
+    cleaned = re.sub(r'^\s*```', '', raw_output.strip(), flags=re.MULTILINE)
+    cleaned = re.sub(r"\s*```$", "", cleaned.strip(), flags=re.MULTILINE)
+
+    # 3. Extract first {...} JSON block if extra text remains
+    match = re.search(r"(\{.*\})", cleaned, flags=re.DOTALL)
+    if match:
+        cleaned = match.group(1).strip()
+
+    # 4. Parse JSON
     try:
-        print(f"[+] Invoking LLM: {llm_type}")
-        raw_output = LLM_DISPATCH[llm_type](access_counts, api_key)
-
-        # Clean markdown-wrapped JSON blocks (e.g., ```json ... ```)
-        cleaned_output = re.sub(r"```(?:json)?\n?(.*?)```", r"\1", raw_output, flags=re.DOTALL).strip()
-
-        parsed = json.loads(cleaned_output)
-
-        summary = {"total_files": 0, "hot_tier": 0, "warm_tier": 0, "cold_tier": 0}
-        analysis = []
-
-        normalized_counts = {os.path.normpath(k): v for k, v in access_counts.items()}
-
-        for path, tier in parsed.items():
-            normalized_path = os.path.normpath(path if path.startswith("/") else f"/{path}")
-            frequency = normalized_counts.get(normalized_path, "unknown")
-
-            tier_upper = tier.strip().upper()
-            summary["total_files"] += 1
-            if tier_upper == "HOT":
-                summary["hot_tier"] += 1
-            elif tier_upper == "WARM":
-                summary["warm_tier"] += 1
-            elif tier_upper == "COLD":
-                summary["cold_tier"] += 1
-
-            analysis.append({
-                "path": normalized_path,
-                "tier": tier_upper,
-                "score": 0.0,  # Optional: Add confidence score if available from model
-                "access_frequency": frequency
-            })
-
-        return {
-            "summary": summary,
-            "analysis": analysis
-        }
-
+        parsed = json.loads(cleaned)
     except json.JSONDecodeError as e:
-        print(f"[!] JSON parsing failed: {e}")
-        print(f"LLM raw output:\n{raw_output}")
+        snippet = cleaned[:200].replace("\n", " ")
+        print(f"[!] Failed to parse JSON ({e}): {snippet!r}")
         raise ValueError(f"LLM returned invalid JSON format: {e}")
-    except Exception as e:
-        print(f"[!] Error while generating tiering suggestions: {e}")
-        raise RuntimeError(f"LLM processing failed: {e}")
+
+    # 5. Validate structure
+    if not isinstance(parsed, dict):
+        raise ValueError(f"Expected JSON object, got {type(parsed).__name__}")
+
+    # 6. Build summary and analysis
+    normalized_counts = {os.path.normpath(p): cnt for p, cnt in access_counts.items()}
+    summary = {"total_files": 0, "hot_tier": 0, "warm_tier": 0, "cold_tier": 0}
+    analysis = []
+
+    for raw_path, raw_tier in parsed.items():
+        path = os.path.normpath(raw_path if raw_path.startswith("/") else f"/{raw_path}")
+        tier = raw_tier.strip().upper()
+        if tier not in ("HOT", "WARM", "COLD"):
+            raise ValueError(f"Invalid tier '{raw_tier}' for path '{path}'")
+
+        freq = normalized_counts.get(path, "unknown")
+        summary["total_files"] += 1
+        summary[f"{tier.lower()}_tier"] += 1
+
+        analysis.append({
+            "path": path,
+            "tier": tier,
+            "score": 0.0,
+            "access_frequency": freq
+        })
+
+    # 7. Sort analysis by descending access count
+    analysis.sort(key=lambda x: normalized_counts.get(x["path"], 0), reverse=True)
+
+    return {"summary": summary, "analysis": analysis}
