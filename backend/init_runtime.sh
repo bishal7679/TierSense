@@ -1,29 +1,25 @@
 # #!/bin/bash
+#init_runtime.sh
 
 set -e
 
 echo "[+] Generating Filebeat configuration..."
 
 cat > /etc/filebeat/filebeat.yml <<EOF
-filebeat.inputs:
-- type: filestream
-  id: audit_input
-  enabled: true
-  paths:
-    - /var/log/audit/audit.log
-  parsers:
-    - multiline:
-        type: pattern
-        pattern: '^\\s*type='
-        negate: true
-        match: after
-        max_lines: 5000
-        timeout: 2s
-  fields:
-    type: auditd
-  ignore_older: 10m
-  close_inactive: 5m
-  scan_frequency: 10s
+filebeat.modules:
+  - module: auditd
+    log:
+      enabled: true
+      var.paths: ["/var/log/audit/audit.log"]
+
+filebeat.autodiscover:
+  providers:
+    - type: docker
+      hints.enabled: false
+
+filebeat.config.modules:
+  path: ${path.config}/modules.d/*.yml
+  reload.enabled: false
 
 output.file:
   path: "/app/logs"
@@ -32,7 +28,12 @@ output.file:
     pretty: false
     escape_html: false
 
-path.data: /var/lib/filebeat
+logging.to_files: true
+logging.files:
+  path: /app/logs
+  name: filebeat.log
+  keepfiles: 7
+  permissions: 0644
 EOF
 
 echo "[+] Starting Filebeat in background..."
