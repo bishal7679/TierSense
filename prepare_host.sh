@@ -1,4 +1,5 @@
 #!/bin/bash
+# prepare_host.sh
 
 set -e
 
@@ -24,34 +25,44 @@ if [[ ! -f "$AUDIT_HELPER_SCRIPT" ]]; then
     echo "[+] Creating helper script: $AUDIT_HELPER_SCRIPT"
     sudo tee "$AUDIT_HELPER_SCRIPT" > /dev/null << 'EOF'
 #!/bin/bash
+# tiersense_audit_config.sh
 
-ACTION="$1"
-TARGET_DIR="$2"
+set -euo pipefail
+
+ACTION=${1:-}
+WATCH_DIR=${2:-}
 RULES_FILE="/etc/audit/rules.d/tiersense.rules"
-KEY="tiersense_monitoring"
 
-if [[ "$ACTION" == "add" && -n "$TARGET_DIR" ]]; then
-    echo "[+] Adding persistent audit rule for $TARGET_DIR"
+function usage() {
+    echo "Usage: $0 {add|clear} /path/to/dir"
+    exit 1
+}
 
-    # Add rule to rules.d
-    echo "-w $TARGET_DIR -p rwxa -k $KEY" | sudo tee "$RULES_FILE" > /dev/null
+if [[ "$ACTION" == "add" ]]; then
+    if [[ -z "$WATCH_DIR" || ! -d "$WATCH_DIR" ]]; then
+        echo "[ERROR] Invalid or missing directory: '$WATCH_DIR'"
+        usage
+    fi
 
-    # Reload auditd rules safely
+    echo "[+] Adding persistent audit rule for $WATCH_DIR..."
+
+    # Write persistent syscall rule without key
+    echo "-a always,exit -F dir=${WATCH_DIR} -F perm=rwxa -F auid>=1000 -F auid!=4294967295" | sudo tee "$RULES_FILE" > /dev/null
+
     sudo augenrules --load
     sudo systemctl restart auditd
 
-    echo "[✓] Rule added and loaded for: $TARGET_DIR"
+    echo "[✓] Audit rule added and loaded."
 
 elif [[ "$ACTION" == "clear" ]]; then
     echo "[+] Clearing TierSense audit rule..."
     sudo rm -f "$RULES_FILE"
     sudo augenrules --load
     sudo systemctl restart auditd
-    echo "[✓] TierSense audit rules removed."
+    echo "[✓] Audit rules removed."
 
 else
-    echo "Usage: $0 add <directory> | clear"
-    exit 1
+    usage
 fi
 EOF
 

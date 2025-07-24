@@ -3,8 +3,6 @@ import re
 import json
 from collections import defaultdict
 
-AUDIT_KEY = "tiersense_monitoring"
-
 def parse_logs(log_path=None, selected_prefix=None):
     access_counts = defaultdict(int)
     access_times = defaultdict(list)
@@ -35,7 +33,7 @@ def parse_logs(log_path=None, selected_prefix=None):
                 try:
                     entry = json.loads(line)
                     message = entry.get("message", "")
-                    
+
                     # Extract audit ID like msg=audit(1234:567)
                     match = re.search(r'msg=audit\((\d+:\d+)\)', message)
                     if not match:
@@ -48,12 +46,8 @@ def parse_logs(log_path=None, selected_prefix=None):
                     bad += 1
                     continue
 
-        # Process buffered events
+        # Process buffered events (no filtering by key)
         for event_lines in event_buffer.values():
-            # Check if any line contains the tiersense_monitoring key
-            if not any(re.search(r'key\s*=\s*"?tiersense_monitoring"?', line) for line in event_lines):
-                continue
-
             paths = []
             for line in event_lines:
                 path_matches = re.findall(r'name="((?:\\.|[^"\\])*)"', line)
@@ -76,9 +70,9 @@ def parse_logs(log_path=None, selected_prefix=None):
     print(f"[RESULT] Total files parsed: {len(log_files)} | Total good: {total_good}, bad: {total_bad}")
 
     if total_good == 0:
-        print("[WARN] No valid audit entries found with 'tiersense_monitoring'.")
+        print("[WARN] No valid file accesses detected.")
         print("       You can debug with: DEBUG_PARSER=1 python3 parser.py")
-        print("       Or run: sudo ausearch -k tiersense_monitoring")
+        print("       Or inspect raw logs manually.")
 
     return access_counts, access_times
 

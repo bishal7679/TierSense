@@ -13,18 +13,18 @@ async def configure_monitoring(target_dir: str = Form(...)):
     """
     target_dir = target_dir.strip()
 
-    # Step 1: Validate container path
-    if not os.path.exists(target_dir):
-        raise HTTPException(
-            status_code=404,
-            detail=f"Path not found in container: '{target_dir}'. Is it mounted under /host-root?"
-        )
-
-    # Step 2: Must start with /host-root
+    # Step 1: Must start with /host-root
     if not target_dir.startswith("/host-root"):
         raise HTTPException(
             status_code=400,
             detail=f"Expected path to start with /host-root, got: '{target_dir}'"
+        )
+
+    # Step 2: Validate the actual directory inside the container
+    if not os.path.isdir(target_dir):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Path not found in container: '{target_dir}'. Is it mounted under /host-root?"
         )
 
     # Step 3: Convert to host path
@@ -55,5 +55,5 @@ async def configure_monitoring(target_dir: str = Form(...)):
     except subprocess.CalledProcessError as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Audit rule failed: {e.stderr.strip() if e.stderr else 'Unknown error'}"
+            detail=f"Audit rule failed: {e.stderr.strip() or e.stdout.strip() or 'Unknown error'}"
         )
