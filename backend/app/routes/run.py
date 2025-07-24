@@ -22,7 +22,8 @@ async def run_tiering(
         raise HTTPException(400, f"Directory not found: {target}")
 
     # Parse logs (returns only access_counts)
-    access_counts = parse_logs(target)
+    access_counts = parse_logs(target, prefix=target)
+
 
     if not access_counts:
         raise HTTPException(400, "No file access events found in logs. Interact with files and try again.")
