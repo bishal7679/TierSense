@@ -5,7 +5,7 @@ set -e
 
 echo "[+] Generating Filebeat configuration..."
 
-cat > /etc/filebeat/filebeat.yml <<EOF
+ <<'EOF' > /etc/filebeat/filebeat.yml
 filebeat.modules:
   - module: auditd
     log:
@@ -23,8 +23,8 @@ filebeat.modules:
 output.file:
   path: "/app/logs"
   filename: "tiersense-processed.ndjson"
-  rotate_every_kb: 10240  
-  number_of_files: 50      
+  rotate_every_kb: 10240
+  number_of_files: 50
 
 filebeat.config.modules:
   path: ${path.config}/modules.d/*.yml
