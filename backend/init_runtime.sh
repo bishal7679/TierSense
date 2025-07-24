@@ -10,30 +10,26 @@ filebeat.modules:
   - module: auditd
     log:
       enabled: true
-      var.paths: ["/var/log/audit/audit.log"]
-
-filebeat.autodiscover:
-  providers:
-    - type: docker
-      hints.enabled: false
-
-filebeat.config.modules:
-  path: \${path.config}/modules.d/*.yml
-  reload.enabled: false
+      var:
+        paths:
+          - /var/log/audit/audit.log
+  - module: auditd
+    file:
+      enabled: true
+      var:
+        paths:
+          - /var/log/audit/audit.log
 
 output.file:
   path: "/app/logs"
   filename: "tiersense-processed.ndjson"
-  codec.json:
-    pretty: false
-    escape_html: false
+  rotate_every_kb: 10240  
+  number_of_files: 50      
 
-logging.to_files: true
-logging.files:
-  path: /app/logs
-  name: filebeat.log
-  keepfiles: 7
-  permissions: 0644
+filebeat.config.modules:
+  path: ${path.config}/modules.d/*.yml
+  reload.enabled: true
+  reload.period: 10s
 EOF
 
 echo "[+] Starting Filebeat in background..."

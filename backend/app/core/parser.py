@@ -1,83 +1,131 @@
+import argparse
+import json
 import os
 import re
-import json
+import sys
 from collections import defaultdict
+from datetime import datetime, timezone
+from typing import Dict, List
 
-def parse_logs(log_path=None, selected_prefix=None):
-    access_counts = defaultdict(int)
-    access_times = defaultdict(list)
-    total_good, total_bad = 0, 0
+AUDIT_ID_RE = re.compile(r"msg=audit\((\d+\.\d+:\d+)\)")
+HEX_RE      = re.compile(r"(?:\\x[0-9a-fA-F]{2})+")
+FIELD_RES   = {
+    "path": re.compile(r'name="([^"]+)"'),
+    "exe":  re.compile(r'exe="([^"]+)"'),
+    "cwd":  re.compile(r'cwd="([^"]+)"'),
+}
 
-    log_path = log_path or os.getenv("LOG_DIR", "/app/logs")
+def _unhex(match_obj: re.Match) -> str:
+    """Convert one or more \\xNN sequences to ASCII."""
+    byte_seq = bytes.fromhex(match_obj.group(0).replace("\\x", ""))
+    return byte_seq.decode("utf-8", errors="ignore")
 
-    if not os.path.exists(log_path):
-        print(f"[ERROR] Log path does not exist: {log_path}")
-        return {}, {}
+def decode_escapes(value: str) -> str:
+    """Decode all hex escapes and remove residual backslashes."""
+    return HEX_RE.sub(_unhex, value).replace("\\", "")
 
-    log_files = [log_path] if os.path.isfile(log_path) else sorted([
-        os.path.join(log_path, f)
-        for f in os.listdir(log_path)
+def extract_paths(lines: List[str]) -> List[str]:
+    """Return every decoded path string found in PATH, EXE or CWD parts."""
+    found: List[str] = []
+    for line in lines:
+        for regex in FIELD_RES.values():
+            for raw in regex.findall(line):
+                found.append(decode_escapes(raw))
+    return found
+
+def iso_to_dt(iso: str) -> datetime:
+    """Convert ISO-8601 timestamp to timezone-aware datetime."""
+    return datetime.fromisoformat(iso.replace("Z", "+00:00"))
+
+def parse_logs(
+    log_dir: str = "/app/logs",
+    prefix: str = "",
+    since: str = "",
+    debug: bool = False
+) -> Dict[str, int]:
+    """
+    Parse every tiersense-processed*.ndjson file in *log_dir* and
+    return a dict {filepath: access_count}.
+    """
+
+    if not os.path.isdir(log_dir):
+        print(f"[ERROR] path does not exist or is not a directory: {log_dir}", file=sys.stderr)
+        return {}
+
+    files = sorted(
+        f for f in os.listdir(log_dir)
         if f.endswith(".ndjson") and "tiersense-processed" in f
-    ])
+    )
+    print(f"[INFO] NDJSON files detected: {len(files)}")
 
-    print(f"[INFO] Found {len(log_files)} log files to parse.")
+    start_ts = iso_to_dt(since) if since else None
+    counts: Dict[str, int] = defaultdict(int)
 
-    event_buffer = defaultdict(list)
+    for fn in files:
+        good = bad = 0
+        buf: Dict[str, List[str]] = defaultdict(list)
+        full_path = os.path.join(log_dir, fn)
 
-    for path in log_files:
-        print(f"[INFO] Processing file: {path}")
-        good, bad = 0, 0
-
-        with open(path, "r", encoding="utf-8", errors="ignore") as f:
-            for line in f:
+        with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
+            for line in fh:
                 try:
-                    entry = json.loads(line)
-                    message = entry.get("message", "")
-                    if not message:
-                        continue
-
-                    # Extract audit ID like msg=audit(1234:567)
-                    match = re.search(r'msg=audit\((\d+:\d+)\)', message)
-                    if not match:
-                        continue
-
-                    audit_id = match.group(1)
-                    event_buffer[audit_id].append(message)
-
+                    doc = json.loads(line)
                 except json.JSONDecodeError:
                     bad += 1
                     continue
 
-        for event_lines in event_buffer.values():
-            paths = []
-            for line in event_lines:
-                path_matches = re.findall(r'name="((?:\\.|[^"\\])*)"', line)
-                paths.extend(path_matches)
+                # optional time filter (based on Filebeat @timestamp)
+                if start_ts:
+                    ts = iso_to_dt(doc.get("@timestamp", ""))
+                    if ts < start_ts:
+                        continue
 
-            if os.getenv("DEBUG_PARSER") == "1":
-                print(f"[DEBUG] Matched paths: {paths}")
+                msg = doc.get("message", "")
+                audit_id_match = AUDIT_ID_RE.search(msg)
+                if not audit_id_match:
+                    continue
 
-            for p in paths:
-                full_path = os.path.normpath(p.replace("\\x2f", "/"))
-                if full_path:
-                    access_counts[full_path] += 1
-                    good += 1
+                buf[audit_id_match.group(1)].append(msg)
 
-        print(f"[INFO] File done: {good} valid entries, {bad} skipped.")
-        total_good += good
-        total_bad += bad
-        event_buffer.clear()
+        # process buffered multi-line events
+        for event_lines in buf.values():
+            for p in extract_paths(event_lines):
+                # optional prefix filter
+                if prefix and not p.startswith(prefix):
+                    continue
+                counts[p] += 1
+                good += 1
 
-    print(f"[RESULT] Total files parsed: {len(log_files)} | Total good: {total_good}, bad: {total_bad}")
+        print(f"[INFO] {fn}: {good} paths, {bad} malformed JSON lines")
 
-    if total_good == 0:
-        print("[WARN] No valid file accesses detected.")
-        print("       You can debug with: DEBUG_PARSER=1 python3 parser.py")
-        print("       Or inspect raw logs manually.")
+    print(f"[SUMMARY] Unique paths found: {len(counts)}")
+    return counts
 
-    return access_counts, access_times
+def _cli():
+    ap = argparse.ArgumentParser(description="TierSense NDJSON audit parser")
+    ap.add_argument("-d", "--dir", default=os.getenv("LOG_DIR", "/app/logs"),
+                    help="Directory containing Filebeat NDJSON logs")
+    ap.add_argument("--prefix", default="",
+                    help="Only count paths beginning with this prefix")
+    ap.add_argument("--since", default="",
+                    help="ISO timestamp; ignore events before this time")
+    ap.add_argument("--debug", action="store_true",
+                    help="Print decoded paths as they are found")
+    args = ap.parse_args()
+
+    result = parse_logs(
+        log_dir=args.dir,
+        prefix=args.prefix,
+        since=args.since,
+        debug=args.debug
+    )
+
+    if args.debug:
+        # Pretty-print first 10 entries
+        for i, (k, v) in enumerate(result.items()):
+            print(f"[DEBUG] {k} → {v}")
+            if i == 9:
+                break
 
 if __name__ == "__main__":
-    import sys
-    path_arg = sys.argv[1] if len(sys.argv) > 1 else None
-    parse_logs(log_path=path_arg)
+    _cli()
