@@ -8,9 +8,8 @@ WORKDIR /app
 COPY scripts/tiersense_audit_config.sh /usr/local/bin/tiersense_audit_config.sh
 RUN chmod +x /usr/local/bin/tiersense_audit_config.sh
 
-# Install system dependencies (auditd, wget, procps, gpg)
+# Install system dependencies (wget, procps, gpg)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    auditd \
     wget \
     gpg \
     procps \

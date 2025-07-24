@@ -29,6 +29,9 @@ services:
       # Read-only backend environment config
       - ./backend/.env:/app/.env:ro
 
+      #bind-mount the host-side helper  
+      - /usr/local/bin/tiersense_audit_config.sh:/usr/local/bin/tiersense_audit_config.sh:ro
+
     env_file:
       - .env
       - ./backend/.env
