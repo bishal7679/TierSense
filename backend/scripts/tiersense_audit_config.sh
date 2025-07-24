@@ -27,18 +27,18 @@ if [[ "$ACTION" == "add" || "$ACTION" == "remove" ]]; then
 
     if [[ "$ACTION" == "add" ]]; then
         echo "[INFO] Adding audit rule for ${WATCH_DIR} with key '${AUDIT_KEY}'..."
-        sudo auditctl $AUDIT_RULE
+        auditctl $AUDIT_RULE
         echo "[✓] Audit rule added."
 
     elif [[ "$ACTION" == "remove" ]]; then
         echo "[INFO] Removing audit rule for ${WATCH_DIR}..."
-        sudo auditctl -d $AUDIT_RULE
+        auditctl -d $AUDIT_RULE
         echo "[✓] Audit rule removed."
     fi
 
 elif [[ "$ACTION" == "clear" ]]; then
     echo "[INFO] Clearing all audit rules..."
-    sudo auditctl -D
+    auditctl -D
     echo "[✓] All audit rules cleared."
 
 else
@@ -47,4 +47,4 @@ fi
 
 echo
 echo "[INFO] Current audit rules:"
-sudo auditctl -l
+auditctl -l

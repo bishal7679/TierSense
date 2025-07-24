@@ -40,7 +40,7 @@ async def configure_monitoring(target_dir: str = Form(...)):
     # Step 5: Apply rule via host script
     try:
         result = subprocess.run(
-            ["sudo", AUDIT_HELPER, "add", host_path],
+            [AUDIT_HELPER, "add", host_path],
             capture_output=True,
             text=True,
             check=True
