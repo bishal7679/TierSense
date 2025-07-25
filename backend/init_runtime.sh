@@ -31,10 +31,12 @@ filebeat.modules:
       enabled: true
       var.paths: ["/var/log/audit/audit.log"]
 output.file:
+  enabled: true
   path: "/app/logs"
-  filename: "tiersense-processed.ndjson"
+  filename: "tiersense-processed-%{+yyyy-MM-dd}.ndjson"
   rotate_every_kb: 10240
-  number_of_files: 50
+  number_of_files: 3
+  rotation_on_startup: true
 filebeat.config.modules:
   path: ${path.config}/modules.d/*.yml
   reload.enabled: true
