@@ -22,7 +22,7 @@ async def run_tiering(
         raise HTTPException(400, f"Directory not found: {target}")
 
     # Parse logs (returns only access_counts)
-    access_counts = parse_logs(target, prefix=target)
+    access_counts = parse_logs(log_dir=LOG_DIR, prefix=target)
 
 
     if not access_counts:
@@ -37,5 +37,6 @@ async def run_tiering(
     # Return combined response
     return JSONResponse(content={
         "heatmap": heatmap_path,
-        "tiers": suggestions,
+        "analysis": suggestions.get("analysis", []),
+        "summary": suggestions.get("summary", []),
     })

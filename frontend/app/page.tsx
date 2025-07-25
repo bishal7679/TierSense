@@ -140,90 +140,80 @@ const handleRunAnalysis = async () => {
     setApiKeyWarning("API Key is required to run analysis.");
     return;
   }
+
+  const formData = new FormData();
+  formData.append("llm", selectedLLM);
+  formData.append("api_key", apiKey);
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+  let monitorPath: string | null = null;
+
+  if (inputSource === "upload") {
+    if (!uploadedFile) {
+      setApiKeyWarning("Please select and upload a valid .ndjson file.");
+      return;
+    }
+    formData.append("file", uploadedFile);
+  } else {
+    const rawDir = selectedDirectory.trim();
+    if (!rawDir) {
+      setApiKeyWarning("Directory path cannot be empty.");
+      return;
+    }
+    // Always prefix host paths under /host-root
+    monitorPath = rawDir.startsWith("/host-root")
+      ? rawDir
+      : `/host-root${rawDir.startsWith("/") ? rawDir : `/${rawDir}`}`;
+
+    // Configure auditd monitoring
+    try {
+      const configResponse = await fetch(`${apiUrl}/configure-monitoring`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ target_dir: monitorPath }),
+      });
+      if (!configResponse.ok) {
+        const errBody = await configResponse.json();
+        throw new Error(errBody.detail || "Unknown error configuring monitoring");
+      }
+    } catch (err) {
+      setApiKeyWarning(err instanceof Error ? err.message : "Failed to configure monitoring.");
+      return;
+    }
+
+    // Tell run-tiering which directory to analyze
+    formData.append("directory", monitorPath);
+  }
+
   setApiKeyWarning("");
   setIsAnalyzing(true);
 
   try {
-    const formData = new FormData();
-    formData.append("llm", selectedLLM);
-    formData.append("api_key", apiKey);
-
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-    // const resolvedLogDir = selectedDirectory.startsWith("/host-root/")
-    //   ? selectedDirectory
-    //   : `/host-root${selectedDirectory}`;
-
-    // formData.append("log_directory", resolvedLogDir);
-    // // formData.append("log_directory", selectedDirectory);
-
-    if (inputSource === "upload") {
-      if (!uploadedFile) throw new Error("Please select and upload a valid .ndjson file.");
-      formData.append("file", uploadedFile);
-    } else {
-      const dirToMonitor = selectedDirectory.trim();
-      const monitorPath = selectedDirectory.startsWith("/host-root/")
-      ? selectedDirectory
-      : `/host-root${selectedDirectory}`;
-
-      if (!dirToMonitor) {
-          setApiKeyWarning("Directory path cannot be empty.");
-          setIsAnalyzing(false);
-          return;
-      }
-      // Configure monitoring
-      try {
-        const configResponse = await fetch(`${apiUrl}/configure-monitoring`, {
-        method: "POST",
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ target_dir: monitorPath }),
-      });
-        if (!configResponse.ok) {
-          const err = await configResponse.json();
-          throw new Error(`Monitoring config failed: ${err.detail || "unknown error"}`);
-        }
-      } catch (monitoringErr) {
-        setApiKeyWarning(
-          monitoringErr instanceof Error ? monitoringErr.message : "Failed to configure monitoring."
-        );
-        setIsAnalyzing(false);
-        return;
-      }
-    }
-
-    formData.append("log_directory", "/app/logs");
-
     const response = await fetch(`${apiUrl}/api/run-tiering`, {
       method: "POST",
       body: formData,
     });
-
     if (!response.ok) {
-      let errorMsg = "Failed to run analysis.";
+      let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
       try {
-        const err = await response.json();
-        if (err.detail && typeof err.detail === "string") {
-          errorMsg = err.detail;
-        }
+        const errJson = await response.json();
+        if (errJson.detail) errorMsg = errJson.detail;
       } catch {
-        errorMsg =
-          response.status === 401
-            ? "Invalid API Key."
-            : `HTTP ${response.status}: ${response.statusText}`;
+        /* ignore */
       }
       setApiKeyWarning(errorMsg);
       return;
     }
-
     const result = await response.json();
     setResults(result);
-  } catch (error) {
-    setApiKeyWarning(error instanceof Error ? error.message : "Failed to run analysis.");
-    console.error("Failed to fetch:", error);
+  } catch (err) {
+    setApiKeyWarning(err instanceof Error ? err.message : "Failed to run analysis.");
   } finally {
     setIsAnalyzing(false);
   }
 };
+
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
