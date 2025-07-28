@@ -32,7 +32,7 @@ def parse_logs(
         print(f"[ERROR] Log directory does not exist: {log_dir}", file=sys.stderr)
         return {}
 
-    # Handle multiple date formats in filenames
+    # Handle both date formats in filenames
     today_hyphen = datetime.now(timezone.utc).strftime("%Y-%m-%d")  # 2025-07-28
     today_compact = datetime.now(timezone.utc).strftime("%Y%m%d")   # 20250728
     
@@ -82,7 +82,7 @@ def parse_logs(
             elif "type=PATH" in msg or 'name="' in msg:
                 buf[event_id]["path"].append(msg)
 
-    # Process events with proper deduplication
+    # Process events with directory filtering
     for event in buf.values():
         cwd = ""
         for cwd_msg in event["cwd"]:
@@ -100,6 +100,14 @@ def parse_logs(
             p = raw if raw.startswith(os.sep) else os.path.normpath(os.path.join(cwd, raw))
             
             if prefix and not p.startswith(prefix):
+                continue
+            
+            # CRITICAL FIX: Filter out directories completely
+            if os.path.isdir(p):
+                continue
+                
+            # Also filter out the exact prefix path and its variations
+            if p == prefix or p == prefix + "/" or p.rstrip("/") == prefix.rstrip("/"):
                 continue
                 
             if p in seen:
