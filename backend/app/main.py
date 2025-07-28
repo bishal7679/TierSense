@@ -33,20 +33,16 @@ app.include_router(settings.router, prefix="/api")
 # Expose heatmap under /api/heatmap
 @app.get("/api/heatmap")
 def get_heatmap():
-    if os.path.exists(HEATMAP_PATH):
-        return FileResponse(
-            HEATMAP_PATH,
-            media_type="image/png",
-            filename="access_heatmap.png",
-        )
-    return {"error": "Heatmap file not found."}
-
-# Disable caching on heatmap responses without altering the existing get_heatmap body
-@app.middleware("http")
-async def no_cache_heatmap(request, call_next):
-    response = await call_next(request)
-    if request.url.path == "/api/heatmap":
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
+    if not os.path.exists(HEATMAP_PATH):
+        return {"error": "Heatmap file not found."}
+    response = FileResponse(
+        HEATMAP_PATH,
+        media_type="image/png",
+        filename="access_heatmap.png",
+    )
+    # Disable caching
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     return response
+

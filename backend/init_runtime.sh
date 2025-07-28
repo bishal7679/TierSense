@@ -29,6 +29,9 @@ filebeat.modules:
       enabled: true
       var.paths: ["/var/log/audit/audit.log"]
 
+scan.frequency: 1s
+close_inactive: 1s
+
 output.file:
   enabled: true
   path: "/app/logs"
