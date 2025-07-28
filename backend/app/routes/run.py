@@ -13,6 +13,7 @@ async def run_tiering(
     llm: str = Form(...),
     api_key: str = Form(...),
     directory: str = Form(None),
+    top_n: int = Form(50)
 ):
     # Determine directory input (strip container prefix if present)
     raw = directory.strip() if directory else LOG_DIR
@@ -27,7 +28,7 @@ async def run_tiering(
         raise HTTPException(400, f"Directory not found: {raw}")
 
     # Parse logs under LOG_DIR, filtering by the real host path
-    access_counts = parse_logs(log_dir=LOG_DIR, prefix=target)
+    access_counts = parse_logs(log_dir=LOG_DIR, prefix=target, debug=False)
     if not access_counts:
         raise HTTPException(
             400,
@@ -35,8 +36,8 @@ async def run_tiering(
             "Interact with files under the target directory and try again."
         )
 
-    # Generate heatmap
-    heatmap_path = generate_heatmap(access_counts)
+    # Generate heatmap with top N filtering
+    heatmap_path = generate_heatmap(access_counts, top_n=top_n)
 
     # Call LLM for tiering suggestions
     suggestions = generate_tiering_suggestions(llm, access_counts, api_key)
@@ -45,12 +46,23 @@ async def run_tiering(
     def strip_prefix(p: str) -> str:
         return p.replace("/host-root", "", 1) if p.startswith("/host-root") else p
 
-    # Clean analysis entries: strip host-root and remove exact-match of directory itself
+    # Clean analysis entries: strip host-root, remove directories, and deleted files
     analysis = []
     for entry in suggestions.get("analysis", []):
         path = strip_prefix(entry["path"])
-        if path == target:
+        
+        # Skip if this is the target directory itself
+        if path == target or path.rstrip("/") == target.rstrip("/"):
             continue
+            
+        # Skip directories (already filtered in parser but double-check)
+        if os.path.isdir(path):
+            continue
+            
+        # Skip deleted files (already filtered in parser but double-check)
+        if not os.path.exists(path):
+            continue
+            
         entry["path"] = path
         analysis.append(entry)
 
@@ -67,4 +79,5 @@ async def run_tiering(
         "heatmap": heatmap_path,
         "analysis": analysis,
         "summary": summary,
+        "top_n_displayed": min(top_n, len(access_counts))
     })

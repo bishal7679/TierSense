@@ -24,105 +24,28 @@ import {
 } from "@/components/ui/dialog";
 import { llmOptions } from "@/src/config/llmOptions";
 
-// Mock data for demonstration
-const mockResults = {
-  analysis: [
-    {
-      path: "/data/logs/app-2024-01.log",
-      tier: "HOT",
-      score: 0.95,
-      access_frequency: "daily",
-    },
-    {
-      path: "/data/logs/app-2024-02.log",
-      tier: "WARM",
-      score: 0.67,
-      access_frequency: "weekly",
-    },
-    {
-      path: "/data/logs/app-2023-12.log",
-      tier: "COLD",
-      score: 0.23,
-      access_frequency: "monthly",
-    },
-    {
-      path: "/data/backups/db-backup-2024.sql",
-      tier: "COLD",
-      score: 0.15,
-      access_frequency: "rarely",
-    },
-    {
-      path: "/data/cache/temp-files/",
-      tier: "HOT",
-      score: 0.89,
-      access_frequency: "hourly",
-    },
-  ],
-  summary: {
-    total_files: 5,
-    hot_tier: 2,
-    warm_tier: 1,
-    cold_tier: 2,
-  },
-};
-
-// Add mock recommendations data after the mockResults object
-const mockRecommendations = {
-  storage_strategy: {
-    hot_tier: {
-      storage_type: "NVMe SSD",
-      location: "/fast-storage/hot-data/",
-      backup_frequency: "Real-time",
-      retention_policy: "6 months",
-      estimated_cost: "$0.23/GB/month",
-    },
-    warm_tier: {
-      storage_type: "SATA SSD",
-      location: "/standard-storage/warm-data/",
-      backup_frequency: "Daily",
-      retention_policy: "2 years",
-      estimated_cost: "$0.10/GB/month",
-    },
-    cold_tier: {
-      storage_type: "HDD/Cloud Archive",
-      location: "/archive-storage/cold-data/",
-      backup_frequency: "Weekly",
-      retention_policy: "7 years",
-      estimated_cost: "$0.004/GB/month",
-    },
-  },
-  migration_plan: [
-    {
-      action: "Move to hot storage",
-      files: ["/data/logs/app-2024-01.log", "/data/cache/temp-files/"],
-      priority: "High",
-      estimated_savings: "15% performance improvement",
-    },
-    {
-      action: "Archive to cold storage",
-      files: ["/data/logs/app-2023-12.log", "/data/backups/db-backup-2024.sql"],
-      priority: "Medium",
-      estimated_savings: "$45/month storage cost reduction",
-    },
-  ],
-  optimization_summary: {
-    total_cost_savings: "$67/month",
-    performance_improvement: "23%",
-    storage_efficiency: "89%",
-  },
-};
-
 export default function TierSense() {
   const [selectedLLM, setSelectedLLM] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [inputSource, setInputSource] = useState("default");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [results, setResults] = useState<typeof mockResults | null>(null);
+  const [results, setResults] = useState<any | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyWarning, setApiKeyWarning] = useState("");
   const [selectedDirectory, setSelectedDirectory] = useState("");
+  
+  // Historical analysis state
+  const [selectedDate, setSelectedDate] = useState("");
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
+  const [topN, setTopN] = useState(50);
+  const [showHistorical, setShowHistorical] = useState(false);
+  const [isHistoricalMode, setIsHistoricalMode] = useState(false);
+  const [heatmapUrl, setHeatmapUrl] = useState("");
+
+  // API URL configuration
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   // Load API key from localStorage on mount
   useEffect(() => {
@@ -135,85 +58,158 @@ export default function TierSense() {
     if (apiKey) localStorage.setItem("tiersense_api_key", apiKey);
   }, [apiKey]);
 
-const handleRunAnalysis = async () => {
-  if (!apiKey) {
-    setApiKeyWarning("API Key is required to run analysis.");
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append("llm", selectedLLM);
-  formData.append("api_key", apiKey);
-
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-  let monitorPath: string | null = null;
-
-  if (inputSource === "upload") {
-    if (!uploadedFile) {
-      setApiKeyWarning("Please select and upload a valid .ndjson file.");
-      return;
-    }
-    formData.append("file", uploadedFile);
-  } else {
-    const rawDir = selectedDirectory.trim();
-    if (!rawDir) {
-      setApiKeyWarning("Directory path cannot be empty.");
-      return;
-    }
-    // Always prefix host paths under /host-root
-    monitorPath = rawDir.startsWith("/host-root")
-      ? rawDir
-      : `/host-root${rawDir.startsWith("/") ? rawDir : `/${rawDir}`}`;
-
-    // Configure auditd monitoring
+  // Fetch available dates for historical analysis
+  const fetchAvailableDates = async () => {
     try {
-      const configResponse = await fetch(`${apiUrl}/configure-monitoring`, {
+      const response = await fetch(`${apiUrl}/api/historical-dates`);
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableDates(data.available_dates || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch available dates:", error);
+      setAvailableDates([]);
+    }
+  };
+
+  // Load available dates on component mount
+  useEffect(() => {
+    fetchAvailableDates();
+  }, []);
+
+  // Handle historical analysis
+  const handleHistoricalAnalysis = async () => {
+    if (!selectedDate) {
+      setApiKeyWarning("Please select a date for historical analysis.");
+      return;
+    }
+    
+    setIsAnalyzing(true);
+    setApiKeyWarning("");
+    
+    try {
+      const formData = new FormData();
+      formData.append("date", selectedDate);
+      formData.append("top_n", topN.toString());
+      if (selectedDirectory) {
+        const monitorPath = selectedDirectory.startsWith("/host-root")
+          ? selectedDirectory
+          : `/host-root${selectedDirectory.startsWith("/") ? selectedDirectory : `/${selectedDirectory}`}`;
+        formData.append("directory", monitorPath);
+      }
+      
+      const response = await fetch(`${apiUrl}/api/generate-historical-heatmap`, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ target_dir: monitorPath }),
+        body: formData,
       });
-      if (!configResponse.ok) {
-        const errBody = await configResponse.json();
-        throw new Error(errBody.detail || "Unknown error configuring monitoring");
+      
+      if (response.ok) {
+        const result = await response.json();
+        // Update UI with historical results
+        setResults({
+          analysis: [],
+          summary: { 
+            total_files: result.total_files || 0, 
+            hot_tier: 0, 
+            warm_tier: 0, 
+            cold_tier: 0 
+          },
+          heatmap: result.heatmap
+        });
+        setHeatmapUrl(`${apiUrl}${result.heatmap}?ts=${Date.now()}`);
+        setIsHistoricalMode(true);
+      } else {
+        const errorData = await response.json();
+        setApiKeyWarning(errorData.detail || "Failed to generate historical heatmap");
       }
-    } catch (err) {
-      setApiKeyWarning(err instanceof Error ? err.message : "Failed to configure monitoring.");
+    } catch (error) {
+      console.error("Historical analysis failed:", error);
+      setApiKeyWarning("Historical analysis failed. Please try again.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Handle current analysis
+  const handleRunAnalysis = async () => {
+    if (!apiKey) {
+      setApiKeyWarning("API Key is required to run analysis.");
       return;
     }
 
-    // Tell run-tiering which directory to analyze
-    formData.append("directory", monitorPath);
-  }
+    const formData = new FormData();
+    formData.append("llm", selectedLLM);
+    formData.append("api_key", apiKey);
+    formData.append("top_n", topN.toString());
 
-  setApiKeyWarning("");
-  setIsAnalyzing(true);
+    let monitorPath: string | null = null;
 
-  try {
-    const response = await fetch(`${apiUrl}/api/run-tiering`, {
-      method: "POST",
-      body: formData,
-    });
-    if (!response.ok) {
-      let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+    if (inputSource === "upload") {
+      if (!uploadedFile) {
+        setApiKeyWarning("Please select and upload a valid .ndjson file.");
+        return;
+      }
+      formData.append("file", uploadedFile);
+    } else {
+      const rawDir = selectedDirectory.trim();
+      if (!rawDir) {
+        setApiKeyWarning("Directory path cannot be empty.");
+        return;
+      }
+      // Always prefix host paths under /host-root
+      monitorPath = rawDir.startsWith("/host-root")
+        ? rawDir
+        : `/host-root${rawDir.startsWith("/") ? rawDir : `/${rawDir}`}`;
+
+      // Configure auditd monitoring
       try {
-        const errJson = await response.json();
-        if (errJson.detail) errorMsg = errJson.detail;
-      } catch {
-        /* ignore */
+        const configResponse = await fetch(`${apiUrl}/configure-monitoring`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ target_dir: monitorPath }),
+        });
+        if (!configResponse.ok) {
+          const errBody = await configResponse.json();
+          throw new Error(errBody.detail || "Unknown error configuring monitoring");
+        }
+      } catch (err) {
+        setApiKeyWarning(err instanceof Error ? err.message : "Failed to configure monitoring.");
+        return;
       }
-      setApiKeyWarning(errorMsg);
-      return;
-    }
-    const result = await response.json();
-    setResults(result);
-  } catch (err) {
-    setApiKeyWarning(err instanceof Error ? err.message : "Failed to run analysis.");
-  } finally {
-    setIsAnalyzing(false);
-  }
-};
 
+      // Tell run-tiering which directory to analyze
+      formData.append("directory", monitorPath);
+    }
+
+    setApiKeyWarning("");
+    setIsAnalyzing(true);
+
+    try {
+      const response = await fetch(`${apiUrl}/api/run-tiering`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+        try {
+          const errJson = await response.json();
+          if (errJson.detail) errorMsg = errJson.detail;
+        } catch {
+          /* ignore */
+        }
+        setApiKeyWarning(errorMsg);
+        return;
+      }
+      const result = await response.json();
+      setResults(result);
+      setHeatmapUrl(`${apiUrl}/api/heatmap?ts=${Date.now()}`);
+      setIsHistoricalMode(false);
+    } catch (err) {
+      setApiKeyWarning(err instanceof Error ? err.message : "Failed to run analysis.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -335,6 +331,7 @@ const handleRunAnalysis = async () => {
                     </SelectContent>
                   </Select>
                 </div>
+                
                 <div>
                   <Label htmlFor="api-key">API Key</Label>
                   <div className="relative">
@@ -383,24 +380,25 @@ const handleRunAnalysis = async () => {
                     </div>
                     
                     {inputSource === "default" && (
-                    <div className="mt-2">
-                      <Label htmlFor="selectedDirectory" className="text-sm">Directory Path</Label>
-                      <Input
-                      id="selectedDirectory"
-                      type="text"
-                      placeholder="/host-root/nfs/logs"
-                      value={selectedDirectory}
-                      onChange={(e) => {
-                        setSelectedDirectory(e.target.value);
-                        if (inputSource !== "default") setInputSource("default");
-                      }}
-                      className="mt-1"
-                    />
-                    <p className="text-xs text-slate-500 mt-1">
-                      Prefix local paths with /host-root/ (e.g., /host-root/home/user/docs).
-                    </p>
-                    </div>
-                  )}
+                      <div className="mt-2">
+                        <Label htmlFor="selectedDirectory" className="text-sm">Directory Path</Label>
+                        <Input
+                          id="selectedDirectory"
+                          type="text"
+                          placeholder="/host-root/mnt/data"
+                          value={selectedDirectory}
+                          onChange={(e) => {
+                            setSelectedDirectory(e.target.value);
+                            if (inputSource !== "default") setInputSource("default");
+                          }}
+                          className="mt-1"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                          Prefix local paths with /host-root/ (e.g., /host-root/home/user/docs).
+                        </p>
+                      </div>
+                    )}
+                    
                     <div className="flex items-center space-x-2">
                       <input
                         type="radio"
@@ -411,10 +409,7 @@ const handleRunAnalysis = async () => {
                         onChange={(e) => setInputSource(e.target.value)}
                         className="h-4 w-4 text-slate-600"
                       />
-                      <Label
-                        htmlFor="upload-file"
-                        className="text-sm font-normal"
-                      >
+                      <Label htmlFor="upload-file" className="text-sm font-normal">
                         Upload .ndjson file
                       </Label>
                     </div>
@@ -441,9 +436,69 @@ const handleRunAnalysis = async () => {
                   </div>
                 )}
 
+                {/* Top N Files Selection */}
+                <div>
+                  <Label htmlFor="top-n-files">Top N Files</Label>
+                  <Select value={topN.toString()} onValueChange={(v) => setTopN(parseInt(v))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="25">Top 25</SelectItem>
+                      <SelectItem value="50">Top 50</SelectItem>
+                      <SelectItem value="100">Top 100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Historical Analysis Section */}
+                <div className="space-y-4 border-t pt-4">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="show-historical"
+                      checked={showHistorical}
+                      onChange={(e) => setShowHistorical(e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    <Label htmlFor="show-historical" className="text-sm font-normal">
+                      Historical Analysis
+                    </Label>
+                  </div>
+                  
+                  {showHistorical && (
+                    <div className="space-y-3">
+                      <div>
+                        <Label htmlFor="date-select" className="text-sm">Select Date</Label>
+                        <Select value={selectedDate} onValueChange={setSelectedDate}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose date" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableDates.map((date) => (
+                              <SelectItem key={date} value={date}>
+                                {date}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <Button
+                        onClick={handleHistoricalAnalysis}
+                        disabled={!selectedDate || isAnalyzing}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        {isAnalyzing ? "Loading..." : "View Historical Data"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
                 <Button
                   onClick={handleRunAnalysis}
-                  disabled={!selectedLLM || isAnalyzing} // <-- remove !apiKey
+                  disabled={!selectedLLM || isAnalyzing}
                   className="w-full"
                 >
                   {isAnalyzing ? (
@@ -470,7 +525,7 @@ const handleRunAnalysis = async () => {
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle className="text-lg font-medium">
-                      Analysis Summary
+                      {isHistoricalMode ? `Historical Analysis (${selectedDate})` : "Analysis Summary"}
                     </CardTitle>
                     <Button onClick={exportResults} variant="outline" size="sm">
                       <Download className="h-4 w-4 mr-2" />
@@ -509,189 +564,77 @@ const handleRunAnalysis = async () => {
                   </CardContent>
                 </Card>
 
+                {/* Heatmap */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg font-medium">Access Heatmap</CardTitle>
+                    <CardTitle className="text-lg font-medium">
+                      Access Heatmap {isHistoricalMode && `(${selectedDate})`}
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="text-center">
                     <img
-                      src={`http://localhost:8000/api/heatmap?ts=${Date.now()}`}
+                      src={heatmapUrl || `${apiUrl}/api/heatmap?ts=${Date.now()}`}
                       alt="Heatmap"
                       className="mx-auto rounded border border-gray-300"
                       style={{ maxHeight: "500px", objectFit: "contain" }}
+                      onError={(e) => {
+                        console.error("Heatmap failed to load");
+                        e.currentTarget.style.display = 'none';
+                      }}
                     />
                   </CardContent>
                 </Card>
 
-                {/* AI Storage Recommendations */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg font-medium flex items-center">
-                      <Settings className="h-5 w-5 mr-2" />
-                      AI Storage Recommendations
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    {/* Storage Strategy */}
-                    <div>
-                      <h4 className="text-sm font-medium text-slate-900 mb-3">
-                        Recommended Storage Configuration
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {Object.entries(
-                          mockRecommendations.storage_strategy
-                        ).map(([tier, config]) => (
-                          <div
-                            key={tier}
-                            className="border border-gray-200 rounded-lg p-4"
-                          >
-                            <div className="flex items-center mb-2">
-                              <div
-                                className={`w-3 h-3 rounded-full mr-2 ${
-                                  tier === "hot_tier"
-                                    ? "bg-red-500"
-                                    : tier === "warm_tier"
-                                    ? "bg-yellow-500"
-                                    : "bg-blue-500"
-                                }`}
-                              ></div>
-                              <span className="font-medium text-sm uppercase tracking-wide">
-                                {tier.replace("_tier", "")}
-                              </span>
+                {/* Show analysis results only for current analysis */}
+                {!isHistoricalMode && results?.analysis && results.analysis.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg font-medium">
+                        File Analysis Results
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {results.analysis.map((file: any, index: number) => (
+                          <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">{file.path}</div>
+                              <div className="text-xs text-slate-500">
+                                Access frequency: {file.access_frequency}
+                              </div>
                             </div>
-                            <div className="space-y-2 text-sm">
-                              <div>
-                                <span className="text-slate-600">Storage:</span>
-                                <span className="ml-1 font-medium">
-                                  {config.storage_type}
-                                </span>
-                              </div>
-                              <div>
-                                <span className="text-slate-600">
-                                  Location:
-                                </span>
-                                <code className="ml-1 text-xs bg-gray-100 px-1 py-0.5 rounded">
-                                  {config.location}
-                                </code>
-                              </div>
-                              <div>
-                                <span className="text-slate-600">Backup:</span>
-                                <span className="ml-1">
-                                  {config.backup_frequency}
-                                </span>
-                              </div>
-                              <div>
-                                <span className="text-slate-600">Cost:</span>
-                                <span className="ml-1 font-medium text-green-600">
-                                  {config.estimated_cost}
-                                </span>
-                              </div>
+                            <div className="flex items-center space-x-2">
+                              <span
+                                className={`px-2 py-1 text-xs rounded text-white ${getTierColor(file.tier)}`}
+                              >
+                                {file.tier}
+                              </span>
                             </div>
                           </div>
                         ))}
                       </div>
-                    </div>
-
-                    {/* Migration Plan */}
-                    <div>
-                      <h4 className="text-sm font-medium text-slate-900 mb-3">
-                        Migration Action Plan
-                      </h4>
-                      <div className="space-y-3">
-                        {mockRecommendations.migration_plan.map(
-                          (plan, index) => (
-                            <div
-                              key={index}
-                              className="border-l-4 border-slate-300 pl-4 py-2"
-                            >
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-medium text-sm">
-                                  {plan.action}
-                                </span>
-                                <span
-                                  className={`px-2 py-1 text-xs rounded ${
-                                    plan.priority === "High"
-                                      ? "bg-red-100 text-red-700"
-                                      : plan.priority === "Medium"
-                                      ? "bg-yellow-100 text-yellow-700"
-                                      : "bg-green-100 text-green-700"
-                                  }`}
-                                >
-                                  {plan.priority} Priority
-                                </span>
-                              </div>
-                              <div className="text-sm text-slate-600 mb-1">
-                                Files: {plan.files.length} items
-                              </div>
-                              <div className="text-sm text-green-600 font-medium">
-                                Expected benefit: {plan.estimated_savings}
-                              </div>
-                            </div>
-                          )
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Optimization Summary */}
-                    <div className="bg-slate-50 rounded-lg p-4">
-                      <h4 className="text-sm font-medium text-slate-900 mb-3">
-                        Optimization Impact
-                      </h4>
-                      <div className="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                          <div className="text-lg font-semibold text-green-600">
-                            {
-                              mockRecommendations.optimization_summary
-                                .total_cost_savings
-                            }
-                          </div>
-                          <div className="text-xs text-slate-600">
-                            Cost Savings
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-lg font-semibold text-blue-600">
-                            {
-                              mockRecommendations.optimization_summary
-                                .performance_improvement
-                            }
-                          </div>
-                          <div className="text-xs text-slate-600">
-                            Performance Gain
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-lg font-semibold text-purple-600">
-                            {
-                              mockRecommendations.optimization_summary
-                                .storage_efficiency
-                            }
-                          </div>
-                          <div className="text-xs text-slate-600">
-                            Storage Efficiency
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* JSON Output */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg font-medium flex items-center">
-                      <FileText className="h-5 w-5 mr-2" />
-                      JSON Output
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Textarea
-                      value={JSON.stringify(results, null, 2)}
-                      readOnly
-                      className="font-mono text-sm h-64 resize-none"
-                    />
-                  </CardContent>
-                </Card>
+                {!isHistoricalMode && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg font-medium flex items-center">
+                        <FileText className="h-5 w-5 mr-2" />
+                        JSON Output
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Textarea
+                        value={JSON.stringify(results, null, 2)}
+                        readOnly
+                        className="font-mono text-sm h-64 resize-none"
+                      />
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             ) : (
               <Card className="h-96 flex items-center justify-center">
@@ -712,7 +655,9 @@ const handleRunAnalysis = async () => {
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-8 flex flex-col items-center shadow-lg">
             <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mb-4"></div>
-            <div className="text-lg font-medium text-slate-800">TierSense is analyzing your data...</div>
+            <div className="text-lg font-medium text-slate-800">
+              TierSense is analyzing your data...
+            </div>
             <div className="text-sm text-slate-500 mt-2">This may take a few moments</div>
           </div>
         </div>
