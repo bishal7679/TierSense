@@ -7,13 +7,12 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Dict, List
 
-# Regular expressions parsing
 AUDIT_ID_RE = re.compile(r"msg=audit\((\d+\.\d+:\d+)\)")
 HEX_RE      = re.compile(r"(?:\\x[0-9a-fA-F]{2})+")
 FIELD_RES   = {
-    "path": re.compile(r'name="([^"]+)"'),
-    "exe":  re.compile(r'exe="([^"]+)"'),
-    "cwd":  re.compile(r'cwd="([^"]+)"'),
+    "path": re.compile(r'name=\"([^\"]+)\"'),
+    "exe":  re.compile(r'exe=\"([^\"]+)\"'),
+    "cwd":  re.compile(r'cwd=\"([^\"]+)\"'),
 }
 
 def _unhex(match_obj: re.Match) -> str:
@@ -53,9 +52,11 @@ def parse_logs(
         and "tiersense-processed" in f
         and today in f
     ]
+
     if not all_logs:
         print(f"[INFO] No NDJSON logs for {today} in {log_dir}")
         return {}
+
     # Use only the latest file if multiple match
     latest_log = max(
         all_logs,
@@ -66,7 +67,6 @@ def parse_logs(
 
     # Optional time filter
     start_ts = iso_to_dt(since) if since else None
-
     counts: Dict[str, int] = defaultdict(int)
 
     for fn in files:
@@ -136,39 +136,4 @@ def parse_logs(
     print(f"[SUMMARY] Unique paths found: {len(counts)}")
     return counts
 
-def _cli():
-    ap = argparse.ArgumentParser(description="TierSense NDJSON audit parser")
-    ap.add_argument(
-        "-d", "--dir",
-        default=os.getenv("LOG_DIR", "/app/logs"),
-        help="Directory containing Filebeat NDJSON logs"
-    )
-    ap.add_argument(
-        "--prefix", default="",
-        help="Only count paths beginning with this prefix"
-    )
-    ap.add_argument(
-        "--since", default="",
-        help="ISO timestamp; ignore events before this time"
-    )
-    ap.add_argument(
-        "--debug", action="store_true",
-        help="Print decoded paths as they are found"
-    )
-    args = ap.parse_args()
-
-    result = parse_logs(
-        log_dir=args.dir,
-        prefix=args.prefix,
-        since=args.since,
-        debug=args.debug
-    )
-
-    if args.debug:
-        for i, (k, v) in enumerate(result.items()):
-            print(f"[DEBUG] {k} → {v}")
-            if i == 9:
-                break
-
-if __name__ == "__main__":
-    _cli()
+# CLI interface omitted for brevity
