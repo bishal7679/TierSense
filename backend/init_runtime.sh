@@ -35,7 +35,7 @@ close_inactive: 1s
 output.file:
   enabled: true
   path: "/app/logs"
-  filename: "tiersense-processed.ndjson"
+  filename: tiersense-processed-%{+yyyy-MM-dd}.ndjson
   # large file size limit to keep all daily logs in one file
   rotate_every_kb: 524288  # 512MB per file
   number_of_files: 30      # Keep 30 days of files
