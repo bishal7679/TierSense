@@ -58,12 +58,33 @@ def find_log_files(log_dir: str, target_date: Optional[str] = None) -> list:
 
 def is_valid_file_path(path: str, prefix: str) -> bool:
     """Check if path is a valid file that should be counted."""
-    if not path or not os.path.exists(path):
+    if not path:
         return False
     
-    # Skip directories
-    if os.path.isdir(path):
-        return False
+    # FIXED: Check for container-mounted path first
+    container_path = path
+    if path.startswith("/mnt/") or path.startswith("/home/") or path.startswith("/var/"):
+        # Try to find the path under /host-root mount
+        container_path = f"/host-root{path}"
+    
+    # Check existence in container context
+    if not os.path.exists(container_path):
+        # For paths we can't verify, use heuristic filtering
+        # Skip obvious directories based on path patterns
+        if (path.endswith('/') or 
+            path.endswith('/.') or 
+            path.endswith('/..') or
+            '/.' in path.split('/')[-1]):  # Hidden files/dirs
+            return False
+        
+        # Skip paths that are clearly directories based on common patterns
+        common_dirs = ['/bin', '/usr', '/etc', '/var', '/tmp', '/proc', '/sys', '/dev']
+        if any(path.startswith(d) and path.count('/') <= d.count('/') + 1 for d in common_dirs):
+            return False
+    else:
+        # If we can verify existence, check if it's a directory
+        if os.path.isdir(container_path):
+            return False
     
     # Skip the exact prefix directory and its variations
     if prefix:
@@ -201,10 +222,10 @@ def parse_logs(
             if prefix and not abs_path.startswith(prefix):
                 continue
             
-            # Validate file path
+            # Validate file path with container-aware checking
             if not is_valid_file_path(abs_path, prefix):
                 if debug:
-                    print(f"[DEBUG] Skipping invalid/non-existent path: {abs_path}")
+                    print(f"[DEBUG] Skipping invalid path: {abs_path}")
                 continue
             
             event_files.add(abs_path)
