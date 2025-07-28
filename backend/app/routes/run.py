@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import JSONResponse
 from app.core.parser import parse_logs
-from app.core.llm_factory import generateiering_suggestions
+from app.core.llm_factory import generate_tiering_suggestions
 from app.core.heatmap import generate_heatmap
 from app.config import LOG_DIR
 import os
