@@ -4,10 +4,10 @@ import os
 import re
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Dict, List
 
-AUDIT_ID_RE = re.compile(r"msg=audit\((\d+\.\d+:\d+)\)")
+AUDIT_ID_RE =re.compile(r"msg=audit\((\d+\.\d+:\d+)\)")
 HEX_RE      = re.compile(r"(?:\\x[0-9a-fA-F]{2})+")
 FIELD_RES   = {
     "path": re.compile(r'name="([^"]+)"'),
@@ -24,15 +24,6 @@ def decode_escapes(value: str) -> str:
     """Decode all hex escapes and remove residual backslashes."""
     return HEX_RE.sub(_unhex, value).replace("\\", "")
 
-def extract_paths(lines: List[str]) -> List[str]:
-    """Return every decoded path string found in PATH, EXE or CWD parts."""
-    found: List[str] = []
-    for line in lines:
-        for regex in FIELD_RES.values():
-            for raw in regex.findall(line):
-                found.append(decode_escapes(raw))
-    return found
-
 def iso_to_dt(iso: str) -> datetime:
     """Convert ISO-8601 timestamp to timezone-aware datetime."""
     return datetime.fromisoformat(iso.replace("Z", "+00:00"))
@@ -47,7 +38,6 @@ def parse_logs(
     Parse every tiersense-processed*.ndjson file in *log_dir* and
     return a dict {filepath: access_count}.
     """
-
     if not os.path.isdir(log_dir):
         print(f"[ERROR] path does not exist or is not a directory: {log_dir}", file=sys.stderr)
         return {}
@@ -63,7 +53,8 @@ def parse_logs(
 
     for fn in files:
         good = bad = 0
-        buf: Dict[str, List[str]] = defaultdict(list)
+        # buffer audit messages per event id, capturing cwd and path messages
+        buf: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: {"cwd": [], "path": []})
         full_path = os.path.join(log_dir, fn)
 
         with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
@@ -74,25 +65,43 @@ def parse_logs(
                     bad += 1
                     continue
 
-                # optional time filter (based on Filebeat @timestamp)
                 if start_ts:
                     ts = iso_to_dt(doc.get("@timestamp", ""))
                     if ts < start_ts:
                         continue
 
                 msg = doc.get("message", "")
-                audit_id_match = AUDIT_ID_RE.search(msg)
-                if not audit_id_match:
+                m = AUDIT_ID_RE.search(msg)
+                if not m:
                     continue
+                event_id = m.group(1)
 
-                buf[audit_id_match.group(1)].append(msg)
+                # classify message type
+                if msg.startswith("type=CWD") or 'cwd="' in msg:
+                    buf[event_id]["cwd"].append(msg)
+                elif "type=PATH" in msg or 'name="' in msg:
+                    buf[event_id]["path"].append(msg)
 
-        # process buffered multi-line events
-        for event_lines in buf.values():
-            for p in extract_paths(event_lines):
-                # optional prefix filter
+        # process each event: reconstruct full paths
+        for event in buf.values():
+            # extract last cwd for this event
+            cwd = ""
+            for cwd_msg in event["cwd"]:
+                m = FIELD_RES["cwd"].search(cwd_msg)
+                if m:
+                    cwd = decode_escapes(m.group(1))
+
+            # extract each path, prefixing relative names with cwd
+            for path_msg in event["path"]:
+                m = FIELD_RES["path"].search(path_msg)
+                if not m:
+                    continue
+                raw = decode_escapes(m.group(1))
+                p = raw if raw.startswith(os.sep) else os.path.normpath(os.path.join(cwd, raw))
+
                 if prefix and not p.startswith(prefix):
                     continue
+
                 counts[p] += 1
                 good += 1
 
@@ -121,7 +130,6 @@ def _cli():
     )
 
     if args.debug:
-        # Pretty-print first 10 entries
         for i, (k, v) in enumerate(result.items()):
             print(f"[DEBUG] {k} → {v}")
             if i == 9:
