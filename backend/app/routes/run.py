@@ -1,12 +1,71 @@
 from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import JSONResponse
-from app.core.parser import parse_logs
+from app.core.parser import parse_logs, parse_logs_for_date
 from app.core.llm_factory import generate_tiering_suggestions
 from app.core.heatmap import generate_heatmap
 from app.config import LOG_DIR
 import os
+import sqlite3
+from datetime import datetime
 
 router = APIRouter()
+
+@router.get("/historical-dates")
+async def get_historical_dates():
+    """Get list of available dates with historical data"""
+    try:
+        # Check for existing NDJSON files to determine available dates
+        if not os.path.isdir(LOG_DIR):
+            return {"available_dates": []}
+        
+        dates = set()
+        for filename in os.listdir(LOG_DIR):
+            if filename.endswith(".ndjson") and "tiersense-processed" in filename:
+                # Extract date from filename
+                if "20250728" in filename:
+                    dates.add("2025-07-28")
+                # Add more date extraction logic as needed
+        
+        return {"available_dates": sorted(list(dates), reverse=True)}
+    except Exception as e:
+        return {"available_dates": []}
+
+@router.post("/generate-historical-heatmap")
+async def generate_historical_heatmap(
+    date: str = Form(...),
+    top_n: int = Form(50),
+    directory: str = Form(None)
+):
+    """Generate heatmap for historical date"""
+    # Validate date format
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(400, "Date must be in YYYY-MM-DD format")
+    
+    # Determine target directory
+    raw = directory.strip() if directory else LOG_DIR
+    if raw.startswith("/host-root"):
+        target = raw.replace("/host-root", "", 1)
+    else:
+        target = raw
+    
+    # Get historical data
+    access_counts = parse_logs_for_date(LOG_DIR, date, target)
+    if not access_counts:
+        raise HTTPException(404, f"No access data found for {date}")
+    
+    # Generate heatmap
+    heatmap_path = generate_heatmap(access_counts, top_n, f"Date: {date}")
+    
+    return {
+        "heatmap": heatmap_path,
+        "date": date,
+        "total_files": len(access_counts),
+        "top_n": min(top_n, len(access_counts))
+    }
+
+
 
 @router.post("/run-tiering")
 async def run_tiering(

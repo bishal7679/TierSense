@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useState, useEffect } from "react";
-import { Download, Settings, BarChart3, FileText, Play, Eye, EyeOff } from "lucide-react";
+import { Download, Settings, BarChart3, FileText, Play, Eye, EyeOff, Filter, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,6 +44,12 @@ export default function TierSense() {
   const [isHistoricalMode, setIsHistoricalMode] = useState(false);
   const [heatmapUrl, setHeatmapUrl] = useState("");
 
+  // Filter and search state
+  const [filePattern, setFilePattern] = useState("");
+  const [searchType, setSearchType] = useState("single");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
   // API URL configuration
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -77,6 +83,70 @@ export default function TierSense() {
     fetchAvailableDates();
   }, []);
 
+  // Handle filter application
+  const handleApplyFilters = async () => {
+    if (searchType === "single" && selectedDate) {
+      await handleHistoricalAnalysis();
+    } else if (searchType === "range" && startDate && endDate) {
+      await handleDateRangeAnalysis();
+    } else {
+      await handleRunAnalysis();
+    }
+  };
+
+  // Handle date range analysis
+  const handleDateRangeAnalysis = async () => {
+    if (!startDate || !endDate) {
+      setApiKeyWarning("Please select both start and end dates for range analysis.");
+      return;
+    }
+    
+    setIsAnalyzing(true);
+    setApiKeyWarning("");
+    
+    try {
+      const formData = new FormData();
+      formData.append("start_date", startDate);
+      formData.append("end_date", endDate);
+      formData.append("top_n", topN.toString());
+      if (selectedDirectory) {
+        const monitorPath = selectedDirectory.startsWith("/host-root")
+          ? selectedDirectory
+          : `/host-root${selectedDirectory.startsWith("/") ? selectedDirectory : `/${selectedDirectory}`}`;
+        formData.append("directory", monitorPath);
+      }
+      
+      const response = await fetch(`${apiUrl}/api/generate-range-heatmap`, {
+        method: "POST",
+        body: formData,
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        setResults({
+          analysis: [],
+          summary: { 
+            total_files: result.total_files || 0, 
+            hot_tier: 0, 
+            warm_tier: 0, 
+            cold_tier: 0 
+          },
+          heatmap: result.heatmap
+        });
+        setHeatmapUrl(`${apiUrl}${result.heatmap}?ts=${Date.now()}`);
+        setIsHistoricalMode(true);
+      } else {
+        const errorData = await response.json();
+        setApiKeyWarning(errorData.detail || "Failed to generate range heatmap");
+      }
+    } catch (error) {
+      console.error("Range analysis failed:", error);
+      setApiKeyWarning("Range analysis failed. Please try again.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   // Handle historical analysis
   const handleHistoricalAnalysis = async () => {
     if (!selectedDate) {
@@ -105,7 +175,6 @@ export default function TierSense() {
       
       if (response.ok) {
         const result = await response.json();
-        // Update UI with historical results
         setResults({
           analysis: [],
           summary: { 
@@ -156,12 +225,10 @@ export default function TierSense() {
         setApiKeyWarning("Directory path cannot be empty.");
         return;
       }
-      // Always prefix host paths under /host-root
       monitorPath = rawDir.startsWith("/host-root")
         ? rawDir
         : `/host-root${rawDir.startsWith("/") ? rawDir : `/${rawDir}`}`;
 
-      // Configure auditd monitoring
       try {
         const configResponse = await fetch(`${apiUrl}/configure-monitoring`, {
           method: "POST",
@@ -177,7 +244,6 @@ export default function TierSense() {
         return;
       }
 
-      // Tell run-tiering which directory to analyze
       formData.append("directory", monitorPath);
     }
 
@@ -538,9 +604,7 @@ export default function TierSense() {
                         <div className="text-2xl font-semibold text-slate-900">
                           {results?.summary?.total_files ?? 0}
                         </div>
-                        <div className="text-sm text-slate-600">
-                          Total Files
-                        </div>
+                        <div className="text-sm text-slate-600">Total Files</div>
                       </div>
                       <div className="text-center">
                         <div className="text-2xl font-semibold text-red-600">
@@ -564,11 +628,114 @@ export default function TierSense() {
                   </CardContent>
                 </Card>
 
-                {/* Heatmap */}
+                {/* MOVED: Filtering and Search Controls Above Heatmap */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg font-medium flex items-center">
+                      <Filter className="h-5 w-5 mr-2" />
+                      Heatmap Filters & Search
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      {/* Search Type */}
+                      <div>
+                        <Label>Search Type</Label>
+                        <Select value={searchType} onValueChange={setSearchType}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="single">Single Date</SelectItem>
+                            <SelectItem value="range">Date Range</SelectItem>
+                            <SelectItem value="pattern">File Pattern</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Conditional Date Fields */}
+                      {(searchType === "single" || searchType === "range") && (
+                        <div>
+                          <Label>Start Date</Label>
+                          <Input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                          />
+                        </div>
+                      )}
+
+                      {searchType === "range" && (
+                        <div>
+                          <Label>End Date</Label>
+                          <Input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                          />
+                        </div>
+                      )}
+
+                      {/* File Pattern Search */}
+                      {searchType === "pattern" && (
+                        <div>
+                          <Label>File Pattern</Label>
+                          <Input
+                            placeholder="e.g., .log, report, temp"
+                            value={filePattern}
+                            onChange={(e) => setFilePattern(e.target.value)}
+                          />
+                        </div>
+                      )}
+
+                      {/* Top N Filter - Always visible */}
+                      <div>
+                        <Label>Show Top Files</Label>
+                        <Select value={topN.toString()} onValueChange={(v) => setTopN(parseInt(v))}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="25">Top 25</SelectItem>
+                            <SelectItem value="50">Top 50</SelectItem>
+                            <SelectItem value="100">Top 100</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Apply Filters Button */}
+                    <div className="flex justify-end space-x-2">
+                      <Button
+                        onClick={() => {
+                          setSearchType("single");
+                          setStartDate("");
+                          setEndDate("");
+                          setFilePattern("");
+                          setSelectedDate("");
+                        }}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Clear Filters
+                      </Button>
+                      <Button
+                        onClick={handleApplyFilters}
+                        disabled={isAnalyzing}
+                        className="flex items-center"
+                      >
+                        <Search className="h-4 w-4 mr-2" />
+                        {isAnalyzing ? "Applying..." : "Apply Filters"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Heatmap - Now Below Filters */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg font-medium">
-                      Access Heatmap {isHistoricalMode && `(${selectedDate})`}
+                      Access Heatmap {isHistoricalMode && `(${selectedDate || `${startDate} - ${endDate}`})`}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="text-center">
