@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useState, useEffect } from "react";
-import { Download, Settings, BarChart3, FileText, Play, Eye, EyeOff, Filter, Search } from "lucide-react";
+import { Download, Settings, BarChart3, FileText, Play, Eye, EyeOff, Filter, Search, Calendar, Hash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -36,35 +36,34 @@ export default function TierSense() {
   const [apiKeyWarning, setApiKeyWarning] = useState("");
   const [selectedDirectory, setSelectedDirectory] = useState("");
   
-  // Historical analysis state
-  const [selectedDate, setSelectedDate] = useState("");
+  // Enhanced search and filter state
   const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [topN, setTopN] = useState(50);
-  const [showHistorical, setShowHistorical] = useState(false);
-  const [isHistoricalMode, setIsHistoricalMode] = useState(false);
   const [heatmapUrl, setHeatmapUrl] = useState("");
-
-  // Filter and search state
-  const [filePattern, setFilePattern] = useState("");
-  const [searchType, setSearchType] = useState("single");
+  const [searchEnabled, setSearchEnabled] = useState(false);
+  
+  // Search filters
+  const [searchType, setSearchType] = useState("current");
+  const [selectedDate, setSelectedDate] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [filePattern, setFilePattern] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
 
-  // API URL configuration
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-  // Load API key from localStorage on mount
+  // Load API key and fetch dates
   useEffect(() => {
     const savedKey = localStorage.getItem("tiersense_api_key");
     if (savedKey) setApiKey(savedKey);
+    fetchAvailableDates();
   }, []);
 
-  // Save API key to localStorage on change
   useEffect(() => {
     if (apiKey) localStorage.setItem("tiersense_api_key", apiKey);
   }, [apiKey]);
 
-  // Fetch available dates for historical analysis
+  // Fetch available dates
   const fetchAvailableDates = async () => {
     try {
       const response = await fetch(`${apiUrl}/api/historical-dates`);
@@ -74,41 +73,19 @@ export default function TierSense() {
       }
     } catch (error) {
       console.error("Failed to fetch available dates:", error);
-      setAvailableDates([]);
     }
   };
 
-  // Load available dates on component mount
-  useEffect(() => {
-    fetchAvailableDates();
-  }, []);
-
-  // Handle filter application
-  const handleApplyFilters = async () => {
-    if (searchType === "single" && selectedDate) {
-      await handleHistoricalAnalysis();
-    } else if (searchType === "range" && startDate && endDate) {
-      await handleDateRangeAnalysis();
-    } else {
-      await handleRunAnalysis();
-    }
-  };
-
-  // Handle date range analysis
-  const handleDateRangeAnalysis = async () => {
-    if (!startDate || !endDate) {
-      setApiKeyWarning("Please select both start and end dates for range analysis.");
-      return;
-    }
-    
-    setIsAnalyzing(true);
+  // Handle advanced search
+  const handleAdvancedSearch = async () => {
+    setIsSearching(true);
     setApiKeyWarning("");
     
     try {
       const formData = new FormData();
-      formData.append("start_date", startDate);
-      formData.append("end_date", endDate);
+      formData.append("search_type", searchType);
       formData.append("top_n", topN.toString());
+      
       if (selectedDirectory) {
         const monitorPath = selectedDirectory.startsWith("/host-root")
           ? selectedDirectory
@@ -116,90 +93,47 @@ export default function TierSense() {
         formData.append("directory", monitorPath);
       }
       
-      const response = await fetch(`${apiUrl}/api/generate-range-heatmap`, {
+      // Add search-specific parameters
+      if (searchType === "date" && selectedDate) {
+        formData.append("date", selectedDate);
+      } else if (searchType === "range" && startDate && endDate) {
+        formData.append("start_date", startDate);
+        formData.append("end_date", endDate);
+      } else if (searchType === "pattern" && filePattern) {
+        formData.append("file_pattern", filePattern);
+      }
+      
+      const response = await fetch(`${apiUrl}/api/search-heatmaps`, {
         method: "POST",
         body: formData,
       });
       
       if (response.ok) {
         const result = await response.json();
-        setResults({
-          analysis: [],
-          summary: { 
-            total_files: result.total_files || 0, 
-            hot_tier: 0, 
-            warm_tier: 0, 
-            cold_tier: 0 
-          },
-          heatmap: result.heatmap
-        });
         setHeatmapUrl(`${apiUrl}${result.heatmap}?ts=${Date.now()}`);
-        setIsHistoricalMode(true);
+        setResults({
+          ...results,
+          heatmap: result.heatmap,
+          search_info: {
+            type: result.search_type,
+            title: result.title,
+            total_files: result.total_files,
+            displayed_files: result.displayed_files
+          }
+        });
       } else {
         const errorData = await response.json();
-        setApiKeyWarning(errorData.detail || "Failed to generate range heatmap");
+        setApiKeyWarning(errorData.detail || "Search failed");
       }
     } catch (error) {
-      console.error("Range analysis failed:", error);
-      setApiKeyWarning("Range analysis failed. Please try again.");
+      console.error("Search failed:", error);
+      setApiKeyWarning("Search failed. Please try again.");
     } finally {
-      setIsAnalyzing(false);
+      setIsSearching(false);
     }
   };
 
-  // Handle historical analysis
-  const handleHistoricalAnalysis = async () => {
-    if (!selectedDate) {
-      setApiKeyWarning("Please select a date for historical analysis.");
-      return;
-    }
-    
-    setIsAnalyzing(true);
-    setApiKeyWarning("");
-    
-    try {
-      const formData = new FormData();
-      formData.append("date", selectedDate);
-      formData.append("top_n", topN.toString());
-      if (selectedDirectory) {
-        const monitorPath = selectedDirectory.startsWith("/host-root")
-          ? selectedDirectory
-          : `/host-root${selectedDirectory.startsWith("/") ? selectedDirectory : `/${selectedDirectory}`}`;
-        formData.append("directory", monitorPath);
-      }
-      
-      const response = await fetch(`${apiUrl}/api/generate-historical-heatmap`, {
-        method: "POST",
-        body: formData,
-      });
-      
-      if (response.ok) {
-        const result = await response.json();
-        setResults({
-          analysis: [],
-          summary: { 
-            total_files: result.total_files || 0, 
-            hot_tier: 0, 
-            warm_tier: 0, 
-            cold_tier: 0 
-          },
-          heatmap: result.heatmap
-        });
-        setHeatmapUrl(`${apiUrl}${result.heatmap}?ts=${Date.now()}`);
-        setIsHistoricalMode(true);
-      } else {
-        const errorData = await response.json();
-        setApiKeyWarning(errorData.detail || "Failed to generate historical heatmap");
-      }
-    } catch (error) {
-      console.error("Historical analysis failed:", error);
-      setApiKeyWarning("Historical analysis failed. Please try again.");
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  // Handle current analysis
+  // Main analysis function
   const handleRunAnalysis = async () => {
     if (!apiKey) {
       setApiKeyWarning("API Key is required to run analysis.");
@@ -255,21 +189,24 @@ export default function TierSense() {
         method: "POST",
         body: formData,
       });
+      
       if (!response.ok) {
         let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
         try {
           const errJson = await response.json();
           if (errJson.detail) errorMsg = errJson.detail;
-        } catch {
-          /* ignore */
-        }
+        } catch { /* ignore */ }
         setApiKeyWarning(errorMsg);
         return;
       }
+      
       const result = await response.json();
       setResults(result);
-      setHeatmapUrl(`${apiUrl}/api/heatmap?ts=${Date.now()}`);
-      setIsHistoricalMode(false);
+      setHeatmapUrl(`${apiUrl}${result.heatmap}?ts=${Date.now()}`);
+      setSearchEnabled(result.search_enabled || false);
+      
+      // Refresh available dates after analysis
+      fetchAvailableDates();
     } catch (err) {
       setApiKeyWarning(err instanceof Error ? err.message : "Failed to run analysis.");
     } finally {
@@ -298,15 +235,19 @@ export default function TierSense() {
 
   const getTierColor = (tier: string) => {
     switch (tier) {
-      case "HOT":
-        return "bg-red-500";
-      case "WARM":
-        return "bg-yellow-500";
-      case "COLD":
-        return "bg-blue-500";
-      default:
-        return "bg-gray-500";
+      case "HOT": return "bg-red-500";
+      case "WARM": return "bg-yellow-500";
+      case "COLD": return "bg-blue-500";
+      default: return "bg-gray-500";
     }
+  };
+
+  const clearSearch = () => {
+    setSearchType("current");
+    setSelectedDate("");
+    setStartDate("");
+    setEndDate("");
+    setFilePattern("");
   };
 
   return (
@@ -317,9 +258,7 @@ export default function TierSense() {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
               <BarChart3 className="h-8 w-8 text-slate-700" />
-              <h1 className="text-2xl font-semibold text-slate-900">
-                TierSense
-              </h1>
+              <h1 className="text-2xl font-semibold text-slate-900">TierSense</h1>
             </div>
             <Dialog open={showSettings} onOpenChange={setShowSettings}>
               <DialogTrigger asChild>
@@ -350,18 +289,11 @@ export default function TierSense() {
                         className="absolute inset-y-0 right-0 flex items-center px-2 text-slate-500"
                         tabIndex={-1}
                       >
-                        {showApiKey ? (
-                          <EyeOff className="h-5 w-5" />
-                        ) : (
-                          <Eye className="h-5 w-5" />
-                        )}
+                        {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                       </button>
                     </div>
                   </div>
-                  <Button
-                    onClick={() => setShowSettings(false)}
-                    className="w-full"
-                  >
+                  <Button onClick={() => setShowSettings(false)} className="w-full">
                     Save Configuration
                   </Button>
                 </div>
@@ -377,9 +309,7 @@ export default function TierSense() {
           <div className="lg:col-span-1">
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg font-medium">
-                  Analysis Configuration
-                </CardTitle>
+                <CardTitle className="text-lg font-medium">Analysis Configuration</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
@@ -415,11 +345,7 @@ export default function TierSense() {
                       className="absolute inset-y-0 right-0 flex items-center px-2 text-slate-500"
                       tabIndex={-1}
                     >
-                      {showApiKey ? (
-                        <EyeOff className="h-5 w-5" />
-                      ) : (
-                        <Eye className="h-5 w-5" />
-                      )}
+                      {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
                   </div>
                   {apiKeyWarning && (
@@ -453,10 +379,7 @@ export default function TierSense() {
                           type="text"
                           placeholder="/host-root/mnt/data"
                           value={selectedDirectory}
-                          onChange={(e) => {
-                            setSelectedDirectory(e.target.value);
-                            if (inputSource !== "default") setInputSource("default");
-                          }}
+                          onChange={(e) => setSelectedDirectory(e.target.value)}
                           className="mt-1"
                         />
                         <p className="text-xs text-slate-500 mt-1">
@@ -502,66 +425,6 @@ export default function TierSense() {
                   </div>
                 )}
 
-                {/* Top N Files Selection */}
-                <div>
-                  <Label htmlFor="top-n-files">Top N Files</Label>
-                  <Select value={topN.toString()} onValueChange={(v) => setTopN(parseInt(v))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="25">Top 25</SelectItem>
-                      <SelectItem value="50">Top 50</SelectItem>
-                      <SelectItem value="100">Top 100</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Historical Analysis Section */}
-                <div className="space-y-4 border-t pt-4">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="show-historical"
-                      checked={showHistorical}
-                      onChange={(e) => setShowHistorical(e.target.checked)}
-                      className="h-4 w-4"
-                    />
-                    <Label htmlFor="show-historical" className="text-sm font-normal">
-                      Historical Analysis
-                    </Label>
-                  </div>
-                  
-                  {showHistorical && (
-                    <div className="space-y-3">
-                      <div>
-                        <Label htmlFor="date-select" className="text-sm">Select Date</Label>
-                        <Select value={selectedDate} onValueChange={setSelectedDate}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Choose date" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableDates.map((date) => (
-                              <SelectItem key={date} value={date}>
-                                {date}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      
-                      <Button
-                        onClick={handleHistoricalAnalysis}
-                        disabled={!selectedDate || isAnalyzing}
-                        variant="outline"
-                        className="w-full"
-                      >
-                        {isAnalyzing ? "Loading..." : "View Historical Data"}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
                 <Button
                   onClick={handleRunAnalysis}
                   disabled={!selectedLLM || isAnalyzing}
@@ -591,7 +454,7 @@ export default function TierSense() {
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle className="text-lg font-medium">
-                      {isHistoricalMode ? `Historical Analysis (${selectedDate})` : "Analysis Summary"}
+                      {results.search_info?.title || "Analysis Summary"}
                     </CardTitle>
                     <Button onClick={exportResults} variant="outline" size="sm">
                       <Download className="h-4 w-4 mr-2" />
@@ -602,7 +465,7 @@ export default function TierSense() {
                     <div className="grid grid-cols-4 gap-4">
                       <div className="text-center">
                         <div className="text-2xl font-semibold text-slate-900">
-                          {results?.summary?.total_files ?? 0}
+                          {results?.summary?.total_files ?? results?.search_info?.displayed_files ?? 0}
                         </div>
                         <div className="text-sm text-slate-600">Total Files</div>
                       </div>
@@ -628,137 +491,153 @@ export default function TierSense() {
                   </CardContent>
                 </Card>
 
-                {/* MOVED: Filtering and Search Controls Above Heatmap */}
+                {/* Enhanced Search and Filter Controls - Above Heatmap */}
+                {searchEnabled && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg font-medium flex items-center">
+                        <Filter className="h-5 w-5 mr-2" />
+                        Heatmap Search & Filters
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                        {/* Search Type */}
+                        <div>
+                          <Label>Search Type</Label>
+                          <Select value={searchType} onValueChange={setSearchType}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="current">Current Day</SelectItem>
+                              <SelectItem value="date">Specific Date</SelectItem>
+                              <SelectItem value="range">Date Range</SelectItem>
+                              <SelectItem value="pattern">File Pattern</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Top N Files */}
+                        <div>
+                          <Label>Show Files</Label>
+                          <Select value={topN.toString()} onValueChange={(v) => setTopN(parseInt(v))}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="10">Top 10</SelectItem>
+                              <SelectItem value="25">Top 25</SelectItem>
+                              <SelectItem value="50">Top 50</SelectItem>
+                              <SelectItem value="100">Top 100</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Conditional Date/Pattern Fields */}
+                        {searchType === "date" && (
+                          <div>
+                            <Label>Select Date</Label>
+                            <Select value={selectedDate} onValueChange={setSelectedDate}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Choose date" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableDates.map((date) => (
+                                  <SelectItem key={date} value={date}>
+                                    {date}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        {searchType === "range" && (
+                          <>
+                            <div>
+                              <Label>Start Date</Label>
+                              <Input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <Label>End Date</Label>
+                              <Input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        {searchType === "pattern" && (
+                          <div>
+                            <Label>File Pattern</Label>
+                            <Input
+                              placeholder="e.g., .log, report, temp"
+                              value={filePattern}
+                              onChange={(e) => setFilePattern(e.target.value)}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex justify-end space-x-2">
+                        <Button onClick={clearSearch} variant="outline" size="sm">
+                          Clear
+                        </Button>
+                        <Button
+                          onClick={handleAdvancedSearch}
+                          disabled={isSearching}
+                          className="flex items-center"
+                        >
+                          <Search className="h-4 w-4 mr-2" />
+                          {isSearching ? "Searching..." : "Apply Search"}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Heatmap - Always Displayed After Analysis */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg font-medium flex items-center">
-                      <Filter className="h-5 w-5 mr-2" />
-                      Heatmap Filters & Search
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      {/* Search Type */}
-                      <div>
-                        <Label>Search Type</Label>
-                        <Select value={searchType} onValueChange={setSearchType}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="single">Single Date</SelectItem>
-                            <SelectItem value="range">Date Range</SelectItem>
-                            <SelectItem value="pattern">File Pattern</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Conditional Date Fields */}
-                      {(searchType === "single" || searchType === "range") && (
-                        <div>
-                          <Label>Start Date</Label>
-                          <Input
-                            type="date"
-                            value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                          />
-                        </div>
-                      )}
-
-                      {searchType === "range" && (
-                        <div>
-                          <Label>End Date</Label>
-                          <Input
-                            type="date"
-                            value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                          />
-                        </div>
-                      )}
-
-                      {/* File Pattern Search */}
-                      {searchType === "pattern" && (
-                        <div>
-                          <Label>File Pattern</Label>
-                          <Input
-                            placeholder="e.g., .log, report, temp"
-                            value={filePattern}
-                            onChange={(e) => setFilePattern(e.target.value)}
-                          />
-                        </div>
-                      )}
-
-                      {/* Top N Filter - Always visible */}
-                      <div>
-                        <Label>Show Top Files</Label>
-                        <Select value={topN.toString()} onValueChange={(v) => setTopN(parseInt(v))}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="25">Top 25</SelectItem>
-                            <SelectItem value="50">Top 50</SelectItem>
-                            <SelectItem value="100">Top 100</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    {/* Apply Filters Button */}
-                    <div className="flex justify-end space-x-2">
-                      <Button
-                        onClick={() => {
-                          setSearchType("single");
-                          setStartDate("");
-                          setEndDate("");
-                          setFilePattern("");
-                          setSelectedDate("");
-                        }}
-                        variant="outline"
-                        size="sm"
-                      >
-                        Clear Filters
-                      </Button>
-                      <Button
-                        onClick={handleApplyFilters}
-                        disabled={isAnalyzing}
-                        className="flex items-center"
-                      >
-                        <Search className="h-4 w-4 mr-2" />
-                        {isAnalyzing ? "Applying..." : "Apply Filters"}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Heatmap - Now Below Filters */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg font-medium">
-                      Access Heatmap {isHistoricalMode && `(${selectedDate || `${startDate} - ${endDate}`})`}
+                      <BarChart3 className="h-5 w-5 mr-2" />
+                      Access Heatmap
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="text-center">
-                    <img
-                      src={heatmapUrl || `${apiUrl}/api/heatmap?ts=${Date.now()}`}
-                      alt="Heatmap"
-                      className="mx-auto rounded border border-gray-300"
-                      style={{ maxHeight: "500px", objectFit: "contain" }}
-                      onError={(e) => {
-                        console.error("Heatmap failed to load");
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
+                    {heatmapUrl ? (
+                      <img
+                        src={heatmapUrl}
+                        alt="Access Heatmap"
+                        className="mx-auto rounded border border-gray-300 max-w-full"
+                        style={{ maxHeight: "600px", objectFit: "contain" }}
+                        onError={(e) => {
+                          console.error("Heatmap failed to load");
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="text-slate-500 py-8">
+                        <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>Heatmap will appear here after analysis</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
-                {/* Show analysis results only for current analysis */}
-                {!isHistoricalMode && results?.analysis && results.analysis.length > 0 && (
+                {/* Analysis Results */}
+                {results?.analysis && results.analysis.length > 0 && (
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-lg font-medium">
-                        File Analysis Results
-                      </CardTitle>
+                      <CardTitle className="text-lg font-medium">File Analysis Results</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
@@ -785,32 +664,28 @@ export default function TierSense() {
                 )}
 
                 {/* JSON Output */}
-                {!isHistoricalMode && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg font-medium flex items-center">
-                        <FileText className="h-5 w-5 mr-2" />
-                        JSON Output
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <Textarea
-                        value={JSON.stringify(results, null, 2)}
-                        readOnly
-                        className="font-mono text-sm h-64 resize-none"
-                      />
-                    </CardContent>
-                  </Card>
-                )}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg font-medium flex items-center">
+                      <FileText className="h-5 w-5 mr-2" />
+                      JSON Output
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Textarea
+                      value={JSON.stringify(results, null, 2)}
+                      readOnly
+                      className="font-mono text-sm h-64 resize-none"
+                    />
+                  </CardContent>
+                </Card>
               </div>
             ) : (
               <Card className="h-96 flex items-center justify-center">
                 <div className="text-center text-slate-500">
                   <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p className="text-lg font-medium">No Analysis Results</p>
-                  <p className="text-sm">
-                    Configure your settings and run an analysis to see results
-                  </p>
+                  <p className="text-sm">Configure your settings and run an analysis to see results</p>
                 </div>
               </Card>
             )}
@@ -818,12 +693,12 @@ export default function TierSense() {
         </div>
       </main>
 
-      {isAnalyzing && (
+      {(isAnalyzing || isSearching) && (
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-8 flex flex-col items-center shadow-lg">
             <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mb-4"></div>
             <div className="text-lg font-medium text-slate-800">
-              TierSense is analyzing your data...
+              {isAnalyzing ? "TierSense is analyzing your data..." : "Searching heatmaps..."}
             </div>
             <div className="text-sm text-slate-500 mt-2">This may take a few moments</div>
           </div>
