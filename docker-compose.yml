@@ -16,21 +16,18 @@ services:
     volumes:
       # Mount full host root for analysis (read-only)
       - /:/host-root:ro
-      
       # Mount auditd logs for Filebeat inside container
       - /var/log/audit:/var/log/audit:ro
-
       # Mount NFS directory (user-provided in .env)
       - ${NFS_MOUNT_DIR}:/mnt/nfs:ro
-
       # Persistent volume for logs and heatmap
       - logs:/app/logs
-
       # Read-only backend environment config
       - ./backend/.env:/app/.env:ro
-
       #bind-mount the host-side helper  
       - /usr/local/bin/tiersense_audit_config.sh:/usr/local/bin/tiersense_audit_config.sh:ro
+      # Bind mount auditctl for audit configuration
+      - /usr/sbin/auditctl:/usr/sbin/auditctl:ro
 
     env_file:
       - .env
