@@ -40,7 +40,7 @@ output.file:
   rotate_every_kb: 524288  # 512MB per file
   number_of_files: 30      # Keep 30 days of files
   # Force new file creation on startup
-  rotate_on_startup: false
+  rotate_on_startup: true
 
 filebeat.config.modules:
   path: ${path.config}/modules.d/*.yml
