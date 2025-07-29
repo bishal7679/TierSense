@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     ca-certificates \
     gnupg \
+    cron \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Filebeat from Elastic repo
