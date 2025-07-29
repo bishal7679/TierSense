@@ -34,20 +34,40 @@ filebeat.modules:
   log:
     enabled: true
     var.paths: ["/var/log/audit/audit.log"]
-  scan.frequency: 1s
-  close_inactive: 1s
+    var.convert_timezone: true
+
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths: ["/var/log/audit/audit.log"]
+  fields:
+    logtype: auditd
+  scan_frequency: 10s
+  close_inactive: 5m
+
 output.file:
   enabled: true
   path: "/app/logs"
-  filename: tiersense-processed-%{+yyyy-MM-dd}.ndjson
-  rotate_every_kb: 104857600
+  filename: "tiersense-processed-%{+yyyy-MM-dd}.ndjson"
   number_of_files: 7
+  permissions: 0644
+
 processors:
+- add_host_metadata:
+    when.not.contains.tags: forwarded
 - timestamp:
     field: "@timestamp"
     layouts:
       - '2006-01-02T15:04:05.000Z'
       - '2006-01-02T15:04:05Z'
+      - 'Jan _2 15:04:05'
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /app/logs
+  name: filebeat
+  keepfiles: 3
 EOF
 log "Wrote Filebeat config"
 
