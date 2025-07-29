@@ -29,6 +29,9 @@ services:
       # Bind mount auditctl for audit configuration
       - /usr/sbin/auditctl:/usr/sbin/auditctl:ro
 
+      - /var/log/audit:/var/log/audit:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
     env_file:
       - .env
       - ./backend/.env
