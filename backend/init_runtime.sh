@@ -35,7 +35,7 @@ output.file:
   enabled: true
   path: "/app/logs"
   filename: tiersense-processed-%{+yyyy-MM-dd}.ndjson
-  rotate_every_kb: 0  # Disable size-based rotation
+  rotate_every_kb: 104857600
   number_of_files: 7  # Keep only 7 days (1 week)
   rotate_on_startup: false  # FIXED: Don't create new file on restart
 
