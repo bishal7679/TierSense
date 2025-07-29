@@ -3,8 +3,8 @@ import sys
 import json
 import re
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Dict, Optional
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Optional, List, Tuple
 
 # Regex patterns for parsing audit messages
 AUDIT_ID_RE = re.compile(r"msg=audit\((\d+\.\d+:\d+)\)")
@@ -37,53 +37,61 @@ def iso_to_dt(iso: str) -> Optional[datetime]:
     except ValueError:
         return None
 
-def find_log_files(log_dir: str, target_date: Optional[str] = None) -> list:
+def find_log_files(log_dir: str, target_date: Optional[str] = None) -> List[str]:
     """Find NDJSON log files for the specified date (or today if None)."""
     if target_date:
         date_hyphen = target_date  # Expected format: YYYY-MM-DD
-        date_compact = target_date.replace("-", "")  # YYYYMMDD
     else:
         today = datetime.now(timezone.utc)
         date_hyphen = today.strftime("%Y-%m-%d")
-        date_compact = today.strftime("%Y%m%d")
     
     all_logs = []
     for filename in os.listdir(log_dir):
+        # Support both old format (with YYYYMMDD) and new format (YYYY-MM-DD)
         if (filename.endswith(".ndjson") and 
             "tiersense-processed" in filename and 
-            (date_hyphen in filename or date_compact in filename)):
+            (date_hyphen in filename or date_hyphen.replace("-", "") in filename)):
             all_logs.append(filename)
     
-    return sorted(all_logs, key=lambda f: os.path.getmtime(os.path.join(log_dir, f)))
+    # Sort by modification time (newest first) - prioritize newer files for same date
+    return sorted(all_logs, key=lambda f: os.path.getmtime(os.path.join(log_dir, f)), reverse=True)
 
 def is_valid_file_path(path: str, prefix: str) -> bool:
     """Check if path is a valid file that should be counted."""
     if not path:
         return False
     
-    # FIXED: Check for container-mounted path first
+    # Enhanced path validation with container-aware checking
     container_path = path
-    if path.startswith("/mnt/") or path.startswith("/home/") or path.startswith("/var/"):
+    if path.startswith(("/mnt/", "/home/", "/var/", "/opt/", "/data/")):
         # Try to find the path under /host-root mount
         container_path = f"/host-root{path}"
     
     # Check existence in container context
-    if not os.path.exists(container_path):
-        # For paths we can't verify, use heuristic filtering
+    path_exists = os.path.exists(container_path)
+    
+    if path_exists:
+        # If we can verify existence, check if it's a directory
+        if os.path.isdir(container_path):
+            return False
+    else:
+        # Enhanced heuristic filtering for paths we can't verify
         # Skip obvious directories based on path patterns
         if (path.endswith('/') or 
             path.endswith('/.') or 
             path.endswith('/..') or
+            path.endswith('~') or  # Backup files
             '/.' in path.split('/')[-1]):  # Hidden files/dirs
             return False
         
-        # Skip paths that are clearly directories based on common patterns
-        common_dirs = ['/bin', '/usr', '/etc', '/var', '/tmp', '/proc', '/sys', '/dev']
-        if any(path.startswith(d) and path.count('/') <= d.count('/') + 1 for d in common_dirs):
+        # Skip paths that are clearly directories or system paths
+        system_dirs = ['/bin', '/usr', '/etc', '/var', '/tmp', '/proc', '/sys', '/dev', '/run', '/lib']
+        if any(path.startswith(d) and path.count('/') <= d.count('/') + 1 for d in system_dirs):
             return False
-    else:
-        # If we can verify existence, check if it's a directory
-        if os.path.isdir(container_path):
+        
+        # Skip lock files, temporary files, and cache files
+        temp_patterns = ['.lock', '.tmp', '.cache', '.pid', '.sock']
+        if any(pattern in path.lower() for pattern in temp_patterns):
             return False
     
     # Skip the exact prefix directory and its variations
@@ -96,6 +104,42 @@ def is_valid_file_path(path: str, prefix: str) -> bool:
             return False
     
     return True
+
+def get_file_stats(access_counts: Dict[str, int]) -> Dict[str, int]:
+    """Get statistics about file access patterns."""
+    if not access_counts:
+        return {"total": 0, "hot": 0, "warm": 0, "cold": 0}
+    
+    counts = list(access_counts.values())
+    hot_threshold = 100
+    warm_threshold = 20
+    
+    return {
+        "total": len(counts),
+        "hot": sum(1 for c in counts if c >= hot_threshold),
+        "warm": sum(1 for c in counts if warm_threshold <= c < hot_threshold),
+        "cold": sum(1 for c in counts if c < warm_threshold),
+        "max_access": max(counts) if counts else 0,
+        "min_access": min(counts) if counts else 0,
+        "avg_access": sum(counts) / len(counts) if counts else 0
+    }
+
+def cleanup_previous_day_logs(log_dir: str):
+    """Remove previous day's log files to ensure fresh start for daily reset"""
+    try:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        
+        for filename in os.listdir(log_dir):
+            if (filename.endswith(".ndjson") and 
+                "tiersense-processed" in filename and 
+                today not in filename):
+                # Remove files from previous days
+                old_file_path = os.path.join(log_dir, filename)
+                os.remove(old_file_path)
+                print(f"[INFO] Removed previous day log: {filename}")
+                
+    except Exception as e:
+        print(f"[WARNING] Failed to cleanup previous day logs: {e}")
 
 def parse_logs(
     log_dir: str = "/app/logs",
@@ -129,8 +173,8 @@ def parse_logs(
         print(f"[INFO] No NDJSON logs found for {date_str} in {log_dir}")
         return {}
 
-    # Use the most recent log file
-    latest_log = log_files[-1]
+    # Use the most recent log file (first in sorted list)
+    latest_log = log_files[0]
     print(f"[INFO] Processing log: {latest_log}")
 
     # Parse timestamp filter
@@ -139,6 +183,7 @@ def parse_logs(
     # Track file access counts
     counts = {}
     total_good = total_bad = 0
+    events_processed = 0
     
     # Buffer audit events by event ID
     event_buffer = defaultdict(lambda: {"cwd": [], "path": []})
@@ -176,6 +221,7 @@ def parse_logs(
                     continue
                 
                 event_id = audit_match.group(1)
+                events_processed += 1
                 
                 # Classify and buffer audit messages
                 if msg.startswith("type=CWD") or 'cwd="' in msg:
@@ -187,9 +233,13 @@ def parse_logs(
         print(f"[ERROR] Failed to read log file {latest_log}: {e}", file=sys.stderr)
         return {}
     
+    if debug:
+        print(f"[DEBUG] Total events processed: {events_processed}")
+        print(f"[DEBUG] Event buffer size: {len(event_buffer)}")
+    
     # Process buffered audit events
     for event_id, event_data in event_buffer.items():
-        if debug:
+        if debug and events_processed < 10:  # Limit debug output
             print(f"[DEBUG] Processing event {event_id}")
         
         # Extract working directory for this event
@@ -216,15 +266,15 @@ def parse_logs(
             if raw_path.startswith(os.sep):
                 abs_path = raw_path
             else:
-                abs_path = os.path.normpath(os.path.join(cwd, raw_path))
+                abs_path = os.path.normpath(os.path.join(cwd, raw_path)) if cwd else raw_path
             
             # Apply prefix filter
             if prefix and not abs_path.startswith(prefix):
                 continue
             
-            # Validate file path with container-aware checking
+            # Validate file path with enhanced container-aware checking
             if not is_valid_file_path(abs_path, prefix):
-                if debug:
+                if debug and events_processed < 10:
                     print(f"[DEBUG] Skipping invalid path: {abs_path}")
                 continue
             
@@ -235,11 +285,15 @@ def parse_logs(
             counts[file_path] = counts.get(file_path, 0) + 1
             total_good += 1
             
-            if debug:
+            if debug and total_good <= 20:  # Limit debug output
                 print(f"[DEBUG] Counted access to: {file_path}")
+    
+    # Generate enhanced summary
+    stats = get_file_stats(counts)
     
     print(f"[INFO] {latest_log}: {total_good} file accesses, {total_bad} malformed JSON lines")
     print(f"[SUMMARY] Unique files found: {len(counts)}")
+    print(f"[SUMMARY] File distribution - HOT: {stats['hot']}, WARM: {stats['warm']}, COLD: {stats['cold']}")
     
     if debug and counts:
         print("[DEBUG] Top 10 accessed files:")
@@ -247,6 +301,33 @@ def parse_logs(
             print(f"[DEBUG]   {i+1}. {path}: {count} accesses")
     
     return counts
+
+def parse_logs_with_daily_reset(
+    log_dir: str = "/app/logs",
+    prefix: str = "",
+    debug: bool = False
+) -> Dict[str, int]:
+    """
+    Parse logs with daily reset - each day starts with 0 access counts
+    """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    # Clean up previous day logs first (for daily reset)
+    cleanup_previous_day_logs(log_dir)
+    
+    # Parse only today's logs
+    access_counts = parse_logs(
+        log_dir=log_dir,
+        prefix=prefix,
+        debug=debug,
+        target_date=today
+    )
+    
+    if debug:
+        print(f"[DEBUG] Daily reset parsing for {today}")
+        print(f"[DEBUG] Found {len(access_counts)} files with fresh daily counts")
+    
+    return access_counts
 
 def parse_logs_for_date(
     log_dir: str = "/app/logs",
@@ -273,11 +354,32 @@ def parse_logs_for_date(
         target_date=target_date
     )
 
+def cleanup_old_logs(log_dir: str, days_to_keep: int = 7) -> None:
+    """Clean up old log files, keeping only recent ones (daily reset version)."""
+    try:
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
+        
+        for filename in os.listdir(log_dir):
+            if filename.endswith(".ndjson") and "tiersense-processed" in filename:
+                file_path = os.path.join(log_dir, filename)
+                file_time = datetime.fromtimestamp(os.path.getctime(file_path), tz=timezone.utc)
+                
+                if file_time < cutoff_date:
+                    os.remove(file_path)
+                    print(f"[INFO] Cleaned up old log file: {filename}")
+    except Exception as e:
+        print(f"[WARNING] Failed to cleanup old logs: {e}")
+
+def get_today_counts_only() -> Dict[str, int]:
+    """Get only today's access counts for daily reset functionality"""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return parse_logs_with_daily_reset(target_date=today)
+
 # CLI interface for testing
 def main():
     import argparse
     
-    parser = argparse.ArgumentParser(description="TierSense NDJSON audit log parser")
+    parser = argparse.ArgumentParser(description="TierSense NDJSON audit log parser with daily reset")
     parser.add_argument(
         "-d", "--dir", 
         default=os.getenv("LOG_DIR", "/app/logs"),
@@ -303,16 +405,55 @@ def main():
         action="store_true",
         help="Print debug information"
     )
+    parser.add_argument(
+        "--cleanup", 
+        action="store_true",
+        help="Clean up old log files (older than 7 days for daily reset)"
+    )
+    parser.add_argument(
+        "--stats", 
+        action="store_true",
+        help="Show detailed statistics"
+    )
+    parser.add_argument(
+        "--daily-reset", 
+        action="store_true",
+        help="Use daily reset mode (today's counts only)"
+    )
     
     args = parser.parse_args()
     
-    result = parse_logs(
-        log_dir=args.dir,
-        prefix=args.prefix,
-        since=args.since,
-        debug=args.debug,
-        target_date=args.date if args.date else None
-    )
+    if args.cleanup:
+        cleanup_old_logs(args.dir, days_to_keep=7)  # Keep only 7 days for daily reset
+    
+    if args.daily_reset:
+        # Daily reset mode - only today's counts
+        result = parse_logs_with_daily_reset(
+            log_dir=args.dir,
+            prefix=args.prefix,
+            debug=args.debug
+        )
+        print("[INFO] Daily reset mode: showing only today's access counts")
+    else:
+        # Regular mode
+        result = parse_logs(
+            log_dir=args.dir,
+            prefix=args.prefix,
+            since=args.since,
+            debug=args.debug,
+            target_date=args.date if args.date else None
+        )
+    
+    if args.stats and result:
+        stats = get_file_stats(result)
+        print(f"\n[STATS] Detailed Statistics:")
+        print(f"[STATS] Total files: {stats['total']}")
+        print(f"[STATS] HOT files (≥100 accesses): {stats['hot']}")
+        print(f"[STATS] WARM files (20-99 accesses): {stats['warm']}")
+        print(f"[STATS] COLD files (<20 accesses): {stats['cold']}")
+        print(f"[STATS] Max accesses: {stats['max_access']}")
+        print(f"[STATS] Min accesses: {stats['min_access']}")
+        print(f"[STATS] Average accesses: {stats['avg_access']:.2f}")
     
     if args.debug:
         print("\n[DEBUG] Final results:")

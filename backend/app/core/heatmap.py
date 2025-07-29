@@ -3,7 +3,7 @@ import os
 import logging
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from datetime import datetime  # ← ADDED: Missing import that caused the error
+from datetime import datetime
 from app.config import HEATMAP_PATH
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ def generate_heatmap(access_counts: dict, top_n: int = 50, title_suffix: str = "
         title_suffix: Additional text for the title (e.g., date)
     
     Returns:
-        String path to the generated heatmap image file
+        String API URL path to the generated heatmap image file
     """
     if not access_counts:
         logger.warning("No data for heatmap")
@@ -52,18 +52,26 @@ def generate_heatmap(access_counts: dict, top_n: int = 50, title_suffix: str = "
             colors.append("#3B82F6")  # Blue - COLD
     
     # Dynamic height based on number of items with better scaling
-    height = max(len(paths) * 0.4 + 2, 6)  # Minimum height of 6
-    width = max(14, len(str(max(counts))) * 0.5 + 12)  # Dynamic width based on count values
+    height = max(len(paths) * 0.35 + 3, 6)  # Improved scaling for readability
+    width = max(12, len(str(max(counts))) * 0.4 + 10)  # Better width calculation
     
     fig, ax = plt.subplots(figsize=(width, height))
     
-    # Create horizontal bar chart
-    bars = ax.barh(range(len(paths)), counts, color=colors, alpha=0.8, edgecolor='white', linewidth=0.5)
+    # Create horizontal bar chart with improved styling
+    bars = ax.barh(range(len(paths)), counts, color=colors, alpha=0.85, 
+                   edgecolor='white', linewidth=0.8, height=0.7)
     
     # Customize the plot
     ax.set_yticks(range(len(paths)))
-    # Show only filename for better readability
-    ax.set_yticklabels([os.path.basename(p) for p in paths], fontsize=9)
+    # Show only filename for better readability with truncation for long names
+    labels = []
+    for p in paths:
+        filename = os.path.basename(p)
+        if len(filename) > 25:  # Truncate long filenames
+            filename = filename[:22] + "..."
+        labels.append(filename)
+    
+    ax.set_yticklabels(labels, fontsize=9)
     ax.set_xlabel("Access Frequency", fontsize=11, fontweight='bold')
     
     # Enhanced title with better formatting
@@ -72,34 +80,42 @@ def generate_heatmap(access_counts: dict, top_n: int = 50, title_suffix: str = "
         title += f" ({title_suffix})"
     ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
     
-    # Add value labels on bars with better positioning
+    # Add value labels on bars with improved positioning
     max_count = max(counts)
     for i, (bar, count) in enumerate(zip(bars, counts)):
-        # Position text inside bar if bar is wide enough, otherwise outside
-        text_x = bar.get_width() - (max_count * 0.02) if bar.get_width() > max_count * 0.3 else bar.get_width() + (max_count * 0.01)
-        text_color = 'white' if bar.get_width() > max_count * 0.3 else 'black'
+        # Smart text positioning based on bar width
+        if bar.get_width() > max_count * 0.4:
+            # Inside the bar
+            text_x = bar.get_width() - (max_count * 0.05)
+            text_color = 'white'
+            ha = 'right'
+        else:
+            # Outside the bar
+            text_x = bar.get_width() + (max_count * 0.02)
+            text_color = 'black'
+            ha = 'left'
         
         ax.text(text_x, bar.get_y() + bar.get_height()/2, 
-                str(count), va='center', ha='right' if bar.get_width() > max_count * 0.3 else 'left',
+                str(count), va='center', ha=ha,
                 fontsize=8, fontweight='bold', color=text_color)
     
-    # Enhanced legend with more detailed tiers
+    # Enhanced legend with simplified tiers
     legend = [
         mpatches.Patch(color='#DC2626', label='HOT (≥100)'),
-        # mpatches.Patch(color='#EA580C', label='Very Warm (50-99)'),
-        mpatches.Patch(color='#F59E0B', label='WARM (20-99)'),
-        # mpatches.Patch(color='#10B981', label='Cool (10-19)'),
-        mpatches.Patch(color='#3B82F6', label='COLD (<20)')
+        mpatches.Patch(color='#EA580C', label='Very Warm (50-99)'),
+        mpatches.Patch(color='#F59E0B', label='WARM (20-49)'),
+        mpatches.Patch(color='#10B981', label='Cool (10-19)'),
+        mpatches.Patch(color='#3B82F6', label='COLD (<10)')
     ]
-    ax.legend(handles=legend, loc='lower right', fontsize=9, framealpha=0.9)
+    ax.legend(handles=legend, loc='lower right', fontsize=8, framealpha=0.95)
     
     # Grid for better readability
     ax.grid(axis='x', alpha=0.3, linestyle='--', linewidth=0.5)
     ax.set_axisbelow(True)
     
-    # Better margins and layout
+    # Improved margins and layout
     plt.tight_layout()
-    plt.subplots_adjust(left=0.2, right=0.95, top=0.9, bottom=0.1)
+    plt.subplots_adjust(left=0.25, right=0.95, top=0.92, bottom=0.08)
     
     # Save with timestamp to avoid caching issues
     timestamp = int(datetime.now().timestamp())
@@ -110,11 +126,14 @@ def generate_heatmap(access_counts: dict, top_n: int = 50, title_suffix: str = "
     os.makedirs(os.path.dirname(heatmap_path), exist_ok=True)
     
     # Save with high quality
-    plt.savefig(heatmap_path, dpi=150, bbox_inches='tight', facecolor='white', edgecolor='none')
+    plt.savefig(heatmap_path, dpi=150, bbox_inches='tight', 
+                facecolor='white', edgecolor='none', pad_inches=0.1)
     plt.close()
     
     logger.info("Heatmap saved to %s with %d files displayed", heatmap_path, len(paths))
-    return heatmap_path
+    
+    # FIXED: Return API URL path instead of file system path
+    return f"/api/heatmap/{heatmap_filename}"
 
 def cleanup_old_heatmaps(keep_count: int = 10):
     """
@@ -146,8 +165,32 @@ def cleanup_old_heatmaps(keep_count: int = 10):
         # Remove old files
         for old_file in heatmap_files[keep_count:]:
             old_path = os.path.join(heatmap_dir, old_file)
-            os.remove(old_path)
-            logger.info("Removed old heatmap: %s", old_file)
+            try:
+                os.remove(old_path)
+                logger.info("Removed old heatmap: %s", old_file)
+            except OSError as e:
+                logger.warning("Failed to remove old heatmap %s: %s", old_file, e)
             
     except Exception as e:
         logger.warning("Failed to cleanup old heatmaps: %s", e)
+
+def get_heatmap_stats(access_counts: dict) -> dict:
+    """
+    Get statistics about the access counts for heatmap generation
+    
+    Args:
+        access_counts: Dictionary of file paths and their access counts
+        
+    Returns:
+        Dictionary with statistics
+    """
+    if not access_counts:
+        return {"total_files": 0, "max_count": 0, "min_count": 0, "avg_count": 0}
+    
+    counts = list(access_counts.values())
+    return {
+        "total_files": len(counts),
+        "max_count": max(counts),
+        "min_count": min(counts),
+        "avg_count": sum(counts) / len(counts)
+    }

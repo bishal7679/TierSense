@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useState, useEffect } from "react";
-import { Download, Settings, BarChart3, FileText, Play, Eye, EyeOff, Filter, Search, Calendar, Hash } from "lucide-react";
+import { Download, Settings, BarChart3, FileText, Play, Eye, EyeOff, Filter, Search, Calendar, Hash, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ import {
 import { llmOptions } from "@/src/config/llmOptions";
 
 export default function TierSense() {
+  // Core state
   const [selectedLLM, setSelectedLLM] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [inputSource, setInputSource] = useState("default");
@@ -36,23 +37,23 @@ export default function TierSense() {
   const [apiKeyWarning, setApiKeyWarning] = useState("");
   const [selectedDirectory, setSelectedDirectory] = useState("");
   
-  // Enhanced search and filter state
+  // Daily reset and historical state
   const [availableDates, setAvailableDates] = useState<string[]>([]);
-  const [topN, setTopN] = useState(50);
   const [heatmapUrl, setHeatmapUrl] = useState("");
-  const [searchEnabled, setSearchEnabled] = useState(false);
+  const [dailyResetInfo, setDailyResetInfo] = useState<any>(null);
   
-  // Search filters
+  // Enhanced search and filter state
   const [searchType, setSearchType] = useState("current");
   const [selectedDate, setSelectedDate] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [filePattern, setFilePattern] = useState("");
+  const [topN, setTopN] = useState(50);
   const [isSearching, setIsSearching] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-  // Load API key and fetch dates
+  // Load API key and fetch data on mount
   useEffect(() => {
     const savedKey = localStorage.getItem("tiersense_api_key");
     if (savedKey) setApiKey(savedKey);
@@ -63,7 +64,7 @@ export default function TierSense() {
     if (apiKey) localStorage.setItem("tiersense_api_key", apiKey);
   }, [apiKey]);
 
-  // Fetch available dates
+  // Fetch available dates for historical analysis
   const fetchAvailableDates = async () => {
     try {
       const response = await fetch(`${apiUrl}/api/historical-dates`);
@@ -76,7 +77,7 @@ export default function TierSense() {
     }
   };
 
-  // Handle advanced search
+  // Handle advanced search and filtering
   const handleAdvancedSearch = async () => {
     setIsSearching(true);
     setApiKeyWarning("");
@@ -118,7 +119,8 @@ export default function TierSense() {
             type: result.search_type,
             title: result.title,
             total_files: result.total_files,
-            displayed_files: result.displayed_files
+            displayed_files: result.displayed_files,
+            daily_reset: result.daily_reset
           }
         });
       } else {
@@ -133,7 +135,7 @@ export default function TierSense() {
     }
   };
 
-  // Main analysis function
+  // Main analysis function with daily reset support
   const handleRunAnalysis = async () => {
     if (!apiKey) {
       setApiKeyWarning("API Key is required to run analysis.");
@@ -203,7 +205,14 @@ export default function TierSense() {
       const result = await response.json();
       setResults(result);
       setHeatmapUrl(`${apiUrl}${result.heatmap}?ts=${Date.now()}`);
-      setSearchEnabled(result.search_enabled || false);
+      
+      // Set daily reset info
+      setDailyResetInfo({
+        isDailyReset: result.daily_reset,
+        resetTime: result.reset_time,
+        date: result.date,
+        message: result.message
+      });
       
       // Refresh available dates after analysis
       fetchAvailableDates();
@@ -211,6 +220,29 @@ export default function TierSense() {
       setApiKeyWarning(err instanceof Error ? err.message : "Failed to run analysis.");
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  // Manual reset function
+  const handleManualReset = async () => {
+    try {
+      const response = await fetch(`${apiUrl}/api/manual-reset`, {
+        method: "POST",
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        setApiKeyWarning("");
+        alert(`Manual reset completed: ${result.message}`);
+        // Refresh the page data
+        fetchAvailableDates();
+      } else {
+        const errorData = await response.json();
+        setApiKeyWarning(errorData.message || "Manual reset failed");
+      }
+    } catch (error) {
+      console.error("Manual reset failed:", error);
+      setApiKeyWarning("Manual reset failed. Please try again.");
     }
   };
 
@@ -259,46 +291,62 @@ export default function TierSense() {
             <div className="flex items-center space-x-3">
               <BarChart3 className="h-8 w-8 text-slate-700" />
               <h1 className="text-2xl font-semibold text-slate-900">TierSense</h1>
+              {dailyResetInfo?.isDailyReset && (
+                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                  Daily Reset Active
+                </span>
+              )}
             </div>
-            <Dialog open={showSettings} onOpenChange={setShowSettings}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>API Configuration</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="settings-api-key">API Key</Label>
-                    <div className="relative">
-                      <Input
-                        id="settings-api-key"
-                        type={showApiKey ? "text" : "password"}
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                        placeholder="Enter your API key"
-                        className="pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowApiKey((v) => !v)}
-                        className="absolute inset-y-0 right-0 flex items-center px-2 text-slate-500"
-                        tabIndex={-1}
-                      >
-                        {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                      </button>
-                    </div>
-                  </div>
-                  <Button onClick={() => setShowSettings(false)} className="w-full">
-                    Save Configuration
+            <div className="flex items-center space-x-2">
+              <Button
+                onClick={handleManualReset}
+                variant="outline"
+                size="sm"
+                className="text-orange-600 border-orange-300 hover:bg-orange-50"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Manual Reset
+              </Button>
+              <Dialog open={showSettings} onOpenChange={setShowSettings}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Settings
                   </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>API Configuration</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="settings-api-key">API Key</Label>
+                      <div className="relative">
+                        <Input
+                          id="settings-api-key"
+                          type={showApiKey ? "text" : "password"}
+                          value={apiKey}
+                          onChange={(e) => setApiKey(e.target.value)}
+                          placeholder="Enter your API key"
+                          className="pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowApiKey((v) => !v)}
+                          className="absolute inset-y-0 right-0 flex items-center px-2 text-slate-500"
+                          tabIndex={-1}
+                        >
+                          {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      </div>
+                    </div>
+                    <Button onClick={() => setShowSettings(false)} className="w-full">
+                      Save Configuration
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
         </div>
       </header>
@@ -450,6 +498,24 @@ export default function TierSense() {
           <div className="lg:col-span-2">
             {results ? (
               <div className="space-y-6">
+                {/* Daily Reset Status Banner */}
+                {dailyResetInfo?.isDailyReset && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <Calendar className="h-5 w-5 text-blue-600 mr-3" />
+                      <div>
+                        <h3 className="text-sm font-medium text-blue-800">Daily Reset Active</h3>
+                        <p className="text-xs text-blue-600 mt-1">
+                          Access counts reset daily at {dailyResetInfo.resetTime} | Current date: {dailyResetInfo.date}
+                        </p>
+                        {dailyResetInfo.message && (
+                          <p className="text-xs text-blue-600 mt-1">{dailyResetInfo.message}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Summary */}
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between">
@@ -491,22 +557,28 @@ export default function TierSense() {
                   </CardContent>
                 </Card>
 
-                {/* Enhanced Search and Filter Controls - Above Heatmap */}
-                {searchEnabled && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg font-medium flex items-center">
-                        <Filter className="h-5 w-5 mr-2" />
-                        Heatmap Search & Filters
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                {/* Heatmap with Integrated Search/Filter Controls */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg font-medium flex items-center">
+                      <BarChart3 className="h-5 w-5 mr-2" />
+                      Access Heatmap & Filters
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Integrated Filter Controls */}
+                    <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+                      <div className="flex items-center space-x-2 mb-3">
+                        <Filter className="h-4 w-4 text-gray-600" />
+                        <span className="text-sm font-medium text-gray-700">Heatmap Filters</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         {/* Search Type */}
                         <div>
-                          <Label>Search Type</Label>
+                          <Label className="text-xs text-gray-600">Search Type</Label>
                           <Select value={searchType} onValueChange={setSearchType}>
-                            <SelectTrigger>
+                            <SelectTrigger className="h-8">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -520,9 +592,9 @@ export default function TierSense() {
 
                         {/* Top N Files */}
                         <div>
-                          <Label>Show Files</Label>
+                          <Label className="text-xs text-gray-600">Show Files</Label>
                           <Select value={topN.toString()} onValueChange={(v) => setTopN(parseInt(v))}>
-                            <SelectTrigger>
+                            <SelectTrigger className="h-8">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -537,9 +609,9 @@ export default function TierSense() {
                         {/* Conditional Date/Pattern Fields */}
                         {searchType === "date" && (
                           <div>
-                            <Label>Select Date</Label>
+                            <Label className="text-xs text-gray-600">Select Date</Label>
                             <Select value={selectedDate} onValueChange={setSelectedDate}>
-                              <SelectTrigger>
+                              <SelectTrigger className="h-8">
                                 <SelectValue placeholder="Choose date" />
                               </SelectTrigger>
                               <SelectContent>
@@ -556,19 +628,21 @@ export default function TierSense() {
                         {searchType === "range" && (
                           <>
                             <div>
-                              <Label>Start Date</Label>
+                              <Label className="text-xs text-gray-600">Start Date</Label>
                               <Input
                                 type="date"
                                 value={startDate}
                                 onChange={(e) => setStartDate(e.target.value)}
+                                className="h-8"
                               />
                             </div>
                             <div>
-                              <Label>End Date</Label>
+                              <Label className="text-xs text-gray-600">End Date</Label>
                               <Input
                                 type="date"
                                 value={endDate}
                                 onChange={(e) => setEndDate(e.target.value)}
+                                className="h-8"
                               />
                             </div>
                           </>
@@ -576,60 +650,54 @@ export default function TierSense() {
 
                         {searchType === "pattern" && (
                           <div>
-                            <Label>File Pattern</Label>
+                            <Label className="text-xs text-gray-600">File Pattern</Label>
                             <Input
                               placeholder="e.g., .log, report, temp"
                               value={filePattern}
                               onChange={(e) => setFilePattern(e.target.value)}
+                              className="h-8"
                             />
                           </div>
                         )}
                       </div>
 
                       {/* Action Buttons */}
-                      <div className="flex justify-end space-x-2">
+                      <div className="flex justify-end space-x-2 pt-2">
                         <Button onClick={clearSearch} variant="outline" size="sm">
                           Clear
                         </Button>
                         <Button
                           onClick={handleAdvancedSearch}
                           disabled={isSearching}
+                          size="sm"
                           className="flex items-center"
                         >
-                          <Search className="h-4 w-4 mr-2" />
-                          {isSearching ? "Searching..." : "Apply Search"}
+                          <Search className="h-3 w-3 mr-1" />
+                          {isSearching ? "Searching..." : "Apply"}
                         </Button>
                       </div>
-                    </CardContent>
-                  </Card>
-                )}
+                    </div>
 
-                {/* Heatmap - Always Displayed After Analysis */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg font-medium flex items-center">
-                      <BarChart3 className="h-5 w-5 mr-2" />
-                      Access Heatmap
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-center">
-                    {heatmapUrl ? (
-                      <img
-                        src={heatmapUrl}
-                        alt="Access Heatmap"
-                        className="mx-auto rounded border border-gray-300 max-w-full"
-                        style={{ maxHeight: "600px", objectFit: "contain" }}
-                        onError={(e) => {
-                          console.error("Heatmap failed to load");
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <div className="text-slate-500 py-8">
-                        <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p>Heatmap will appear here after analysis</p>
-                      </div>
-                    )}
+                    {/* Heatmap Display */}
+                    <div className="text-center">
+                      {heatmapUrl ? (
+                        <img
+                          src={heatmapUrl}
+                          alt="Access Heatmap"
+                          className="mx-auto rounded border border-gray-300 max-w-full"
+                          style={{ maxHeight: "600px", objectFit: "contain" }}
+                          onError={(e) => {
+                            console.error("Heatmap failed to load");
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="text-slate-500 py-8">
+                          <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                          <p>Heatmap will appear here after analysis</p>
+                        </div>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
 
