@@ -28,27 +28,22 @@ mkdir -p /app/logs && chmod 777 /app/logs
 log "Prepared /app/logs"
 
 # 4. Write Filebeat config
-cat <<'EOF' >/etc/filebeat/filebeat.yml
-filebeat.modules:
-- module: auditd
-  log:
-    enabled: true
-    var.paths: ["/var/log/audit/audit.log"]
-    var.convert_timezone: true
-
+cat <<'EOF' > /etc/filebeat/filebeat.yml
 filebeat.inputs:
 - type: log
   enabled: true
-  paths: ["/var/log/audit/audit.log"]
-  fields:
-    logtype: auditd
+  paths:
+    - /var/log/audit/audit.log
   scan_frequency: 10s
   close_inactive: 5m
+  fields:
+    logtype: auditd
 
 output.file:
   enabled: true
   path: "/app/logs"
-  filename: "tiersense-processed-%{+yyyy-MM-dd}.ndjson"
+  filename: "tiersense-processed"
+  rotate_every_kb: 10485760
   number_of_files: 7
   permissions: 0644
 
