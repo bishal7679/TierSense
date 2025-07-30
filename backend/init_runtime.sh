@@ -42,7 +42,7 @@ filebeat.inputs:
 output.file:
   enabled: true
   path: "/app/logs"
-  filename: "tiersense-processed"
+  filename: "tiersense-processed-%{+yyyy-MM-dd}.ndjson"
   rotate_every_kb: 10485760
   number_of_files: 7
   permissions: 0644
