@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# init_runtime.sh - Fixed to create only one file
+# init_runtime.sh - FINAL CORRECTED VERSION
 
 set -euo pipefail
 log() { echo "[INIT] $*"; }
@@ -27,7 +27,7 @@ fi
 mkdir -p /app/logs && chmod 777 /app/logs
 log "Prepared /app/logs"
 
-# 4. Write Filebeat config with daily filename
+# 4. Write Filebeat config - CORRECTED to use exact filename
 TODAY=$(date +%Y-%m-%d)
 cat <<EOF > /etc/filebeat/filebeat.yml
 filebeat.inputs:
