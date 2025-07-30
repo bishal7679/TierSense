@@ -38,42 +38,15 @@ def iso_to_dt(iso: str) -> Optional[datetime]:
         return None
 
 def find_log_files(log_dir: str, target_date: Optional[str] = None) -> List[str]:
-    """Find NDJSON log files that Filebeat actually creates (handles both formats)."""
+    """
+    Find NDJSON log files matching today's filename exactly.
+    Expects init_runtime.sh to configure Filebeat to write:
+      tiersense-processed-YYYY-MM-DD.ndjson
+    """
     date_hyphen = target_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    date_compact = date_hyphen.replace("-", "")  # YYYYMMDD format
-    
-    # Look for files in order of preference
-    candidates = []
-    
-    for filename in os.listdir(log_dir):
-        if not (filename.startswith("tiersense-processed") and filename.endswith(".ndjson")):
-            continue
-            
-        # Priority 1: Exact hyphenated match (expected format)
-        if filename == f"tiersense-processed-{date_hyphen}.ndjson":
-            candidates.insert(0, filename)  # Highest priority
-            
-        # Priority 2: Files with unresolved placeholder + date (actual Filebeat output)
-        elif ("%{+YYYY-MM-dd}" in filename or "%{+yyyy-MM-dd}" in filename) and date_compact in filename:
-            candidates.append(filename)
-            
-        # Priority 3: Any file containing the target date in any format
-        elif date_hyphen in filename or date_compact in filename:
-            candidates.append(filename)
-    
-    # Remove duplicates while preserving order
-    seen = set()
-    unique_candidates = []
-    for candidate in candidates:
-        if candidate not in seen:
-            seen.add(candidate)
-            unique_candidates.append(candidate)
-    
-    # Sort by modification time (newest first) for files of same priority
-    if unique_candidates:
-        unique_candidates.sort(key=lambda f: os.path.getmtime(os.path.join(log_dir, f)), reverse=True)
-        
-    return unique_candidates
+    expected = f"tiersense-processed-{date_hyphen}.ndjson"
+    full_path = os.path.join(log_dir, expected)
+    return [expected] if os.path.isfile(full_path) else []
 
 def is_valid_file_path(path: str, prefix: str) -> bool:
     """Check if path is a valid file that should be counted."""
@@ -116,26 +89,18 @@ def get_file_stats(access_counts: Dict[str, int]) -> Dict[str, int]:
     }
 
 def cleanup_previous_day_logs(log_dir: str):
-    """Remove previous day's log files, handling both expected and actual Filebeat formats."""
+    """
+    Remove any NDJSON files that do NOT match today's filename exactly,
+    ensuring only the one Filebeat-created file remains.
+    """
     try:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        today_compact = today.replace("-", "")
-        
+        expected = f"tiersense-processed-{today}.ndjson"
         for filename in os.listdir(log_dir):
-            if not (filename.startswith("tiersense-processed") and filename.endswith(".ndjson")):
-                continue
-                
-            # Keep today's files in any format
-            should_keep = (
-                filename == f"tiersense-processed-{today}.ndjson" or  # Expected format
-                (("%{+YYYY-MM-dd}" in filename or "%{+yyyy-MM-dd}" in filename) and today_compact in filename)  # Actual Filebeat format
-            )
-            
-            if not should_keep:
-                old_file_path = os.path.join(log_dir, filename)
-                os.remove(old_file_path)
-                print(f"[INFO] Removed previous day log: {filename}")
-                
+            if filename.startswith("tiersense-processed") and filename.endswith(".ndjson"):
+                if filename != expected:
+                    os.remove(os.path.join(log_dir, filename))
+                    print(f"[INFO] Removed previous day log: {filename}")
     except Exception as e:
         print(f"[WARNING] Failed to cleanup previous day logs: {e}", file=sys.stderr)
 
@@ -162,7 +127,7 @@ def parse_logs(
         print(f"[INFO] No NDJSON logs found for {date_str} in {log_dir}")
         return {}
 
-    # Use the first (highest priority) log file
+    # Use the single log file for today
     latest_log = log_files[0]
     print(f"[INFO] Processing log: {latest_log}")
     full_path = os.path.join(log_dir, latest_log)
@@ -225,7 +190,9 @@ def parse_logs(
             raw = decode_escapes(m.group(1))
             if not raw:
                 continue
-            abs_path = raw if raw.startswith(os.sep) else os.path.normpath(os.path.join(cwd, raw)) if cwd else raw
+            abs_path = raw if raw.startswith(os.sep) else (
+                os.path.normpath(os.path.join(cwd, raw)) if cwd else raw
+            )
             if prefix and not abs_path.startswith(prefix):
                 continue
             if not is_valid_file_path(abs_path, prefix):
@@ -289,7 +256,9 @@ def cleanup_old_logs(log_dir: str, days_to_keep: int = 7) -> None:
         for filename in os.listdir(log_dir):
             if filename.endswith(".ndjson") and "tiersense-processed" in filename:
                 file_path = os.path.join(log_dir, filename)
-                file_time = datetime.fromtimestamp(os.path.getctime(file_path), tz=timezone.utc)
+                file_time = datetime.fromtimestamp(
+                    os.path.getctime(file_path), tz=timezone.utc
+                )
                 if file_time < cutoff_date:
                     os.remove(file_path)
                     print(f"[INFO] Cleaned up old log file: {filename}")
@@ -304,9 +273,13 @@ def get_today_counts_only() -> Dict[str, int]:
 # CLI interface for testing
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="TierSense NDJSON audit log parser with daily reset")
-    parser.add_argument("-d", "--dir", default=os.getenv("LOG_DIR", "/app/logs"),
-                        help="Directory containing Filebeat NDJSON logs")
+    parser = argparse.ArgumentParser(
+        description="TierSense NDJSON audit log parser with daily reset"
+    )
+    parser.add_argument(
+        "-d", "--dir", default=os.getenv("LOG_DIR", "/app/logs"),
+        help="Directory containing Filebeat NDJSON logs"
+    )
     parser.add_argument("--prefix", default="", help="Only count paths beginning with this prefix")
     parser.add_argument("--since", default="", help="ISO timestamp; ignore events before this time")
     parser.add_argument("--date", default="", help="Parse logs for specific date (YYYY-MM-DD format)")
@@ -323,12 +296,17 @@ def main():
         result = parse_logs_with_daily_reset(log_dir=args.dir, prefix=args.prefix, debug=args.debug)
         print("[INFO] Daily reset mode: showing only today's access counts")
     else:
-        result = parse_logs(log_dir=args.dir, prefix=args.prefix, since=args.since,
-                            debug=args.debug, target_date=args.date or None)
+        result = parse_logs(
+            log_dir=args.dir,
+            prefix=args.prefix,
+            since=args.since,
+            debug=args.debug,
+            target_date=args.date or None
+        )
 
     if args.stats and result:
         stats = get_file_stats(result)
-        print(f"\n[STATS] Detailed Statistics:")
+        print("\n[STATS] Detailed Statistics:")
         print(f"[STATS] Total files: {stats['total']}")
         print(f"[STATS] HOT files (≥100 accesses): {stats['hot']}")
         print(f"[STATS] WARM files (20-99 accesses): {stats['warm']}")

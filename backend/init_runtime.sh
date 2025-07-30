@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# init_runtime.sh – improved to use host’s auditctl client only
+# init_runtime.sh - Fixed to create only one file
 
 set -euo pipefail
 log() { echo "[INIT] $*"; }
 
-# 1. Ensure /usr/sbin/auditctl is present (bind-mounted)
+# 1. Ensure auditctl is present
 if ! command -v auditctl &>/dev/null; then
   log "ERROR: auditctl not found in container. Bind-mount /usr/sbin/auditctl from host."
   exit 1
 fi
 
-# 2. Mount NFS (unchanged)
+# 2. Mount NFS
 if ! mountpoint -q /mnt/nfs; then
   [[ -z "${NFS_SERVER_IP:-}" || -z "${NFS_MOUNT_DIR:-}" ]] \
     && { log "NFS_SERVER_IP and NFS_MOUNT_DIR must be set"; exit 1; }
@@ -27,8 +27,9 @@ fi
 mkdir -p /app/logs && chmod 777 /app/logs
 log "Prepared /app/logs"
 
-# 4. Write Filebeat config
-cat <<'EOF' > /etc/filebeat/filebeat.yml
+# 4. Write Filebeat config with daily filename
+TODAY=$(date +%Y-%m-%d)
+cat <<EOF > /etc/filebeat/filebeat.yml
 filebeat.inputs:
 - type: log
   enabled: true
@@ -42,7 +43,7 @@ filebeat.inputs:
 output.file:
   enabled: true
   path: "/app/logs"
-  filename: "tiersense-processed"
+  filename: "tiersense-processed-${TODAY}.ndjson"
   rotate_on_startup: false
   number_of_files: 7
   permissions: 0644
@@ -64,11 +65,7 @@ logging.files:
   keepfiles: 3
 EOF
 
-# Create a symbolic link to match parser expectations
-TODAY=$(date +%Y-%m-%d)
-ln -sf tiersense-processed /app/logs/tiersense-processed-${TODAY}.ndjson
-
-log "Wrote Filebeat config"
+log "Wrote Filebeat config for ${TODAY}"
 
 # 5. Start Filebeat
 pkill -f filebeat || true
@@ -88,10 +85,7 @@ else
   log "Found $RULES_COUNT audit rules"
 fi
 
-# 7. Create today’s log file
-TODAY=$(date +%Y-%m-%d)
-touch /app/logs/tiersense-processed-${TODAY}.ndjson
 log "Initialized log file for ${TODAY}"
 
-# 8. Start FastAPI
+# 7. Start FastAPI
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --log-level info
