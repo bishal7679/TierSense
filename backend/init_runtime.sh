@@ -85,7 +85,7 @@ else
   log "Found $RULES_COUNT audit rules"
 fi
 
-log "Initialized log file for ${TODAY}"
+# log "Initialized log file for ${TODAY}"
 
 # 7. Start FastAPI
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --log-level info
