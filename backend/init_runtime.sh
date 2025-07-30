@@ -28,7 +28,7 @@ mkdir -p /app/logs && chmod 777 /app/logs
 log "Prepared /app/logs"
 
 # 4. Write Filebeat config - CORRECTED to use exact filename
-TODAY=$(date +%Y-%m-%d)
+# TODAY=$(date +%Y-%m-%d)
 cat <<EOF > /etc/filebeat/filebeat.yml
 filebeat.inputs:
 - type: log
@@ -43,7 +43,7 @@ filebeat.inputs:
 output.file:
   enabled: true
   path: "/app/logs"
-  filename: "tiersense-processed-${TODAY}.ndjson"
+  filename: "tiersense-processed-.ndjson"
   rotate_every_kb: 1048576
   number_of_files: 2
   permissions: 0644
@@ -65,7 +65,7 @@ logging.files:
   keepfiles: 3
 EOF
 
-log "Wrote Filebeat config for ${TODAY}"
+# log "Wrote Filebeat config for ${TODAY}"
 
 # 5. Start Filebeat
 pkill -f filebeat || true
