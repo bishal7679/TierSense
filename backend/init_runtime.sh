@@ -4,13 +4,13 @@
 set -euo pipefail
 log() { echo "[INIT] $*"; }
 
-# 1. Ensure auditctl is present
+# 1. Ensure /usr/sbin/auditctl is present (bind-mounted)
 if ! command -v auditctl &>/dev/null; then
   log "ERROR: auditctl not found in container. Bind-mount /usr/sbin/auditctl from host."
   exit 1
 fi
 
-# 2. Mount NFS
+# 2. Mount NFS (unchanged)
 if ! mountpoint -q /mnt/nfs; then
   [[ -z "${NFS_SERVER_IP:-}" || -z "${NFS_MOUNT_DIR:-}" ]] \
     && { log "NFS_SERVER_IP and NFS_MOUNT_DIR must be set"; exit 1; }
@@ -44,8 +44,8 @@ output.file:
   enabled: true
   path: "/app/logs"
   filename: "tiersense-processed-${TODAY}.ndjson"
-  rotate_on_startup: false
-  number_of_files: 7
+  rotate_every_kb: 1048576
+  number_of_files: 1
   permissions: 0644
 
 processors:
