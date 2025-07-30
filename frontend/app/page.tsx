@@ -51,6 +51,9 @@ export default function TierSense() {
   const [topN, setTopN] = useState(50);
   const [isSearching, setIsSearching] = useState(false);
 
+  // Add new state for total files count
+  const [totalFiles, setTotalFiles] = useState<number | null>(null);
+
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   // Load API key and fetch data on mount
@@ -58,11 +61,28 @@ export default function TierSense() {
     const savedKey = localStorage.getItem("tiersense_api_key");
     if (savedKey) setApiKey(savedKey);
     fetchAvailableDates();
+    fetchTotalFiles();
   }, []);
 
   useEffect(() => {
     if (apiKey) localStorage.setItem("tiersense_api_key", apiKey);
   }, [apiKey]);
+
+  // Fetch total files count for header display
+  const fetchTotalFiles = async () => {
+    try {
+      const response = await fetch(`${apiUrl}/api/health`);
+      if (response.ok) {
+        const data = await response.json();
+        // Extract total files from health endpoint or use results data
+        if (results?.summary?.total_files) {
+          setTotalFiles(results.summary.total_files);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch total files:", error);
+    }
+  };
 
   // Fetch available dates for historical analysis
   const fetchAvailableDates = async () => {
@@ -123,6 +143,8 @@ export default function TierSense() {
             daily_reset: result.daily_reset
           }
         });
+        // Update total files count
+        setTotalFiles(result.total_files);
       } else {
         const errorData = await response.json();
         setApiKeyWarning(errorData.detail || "Search failed");
@@ -214,6 +236,11 @@ export default function TierSense() {
         message: result.message
       });
       
+      // Update total files count from results
+      if (result.summary?.total_files) {
+        setTotalFiles(result.summary.total_files);
+      }
+      
       // Refresh available dates after analysis
       fetchAvailableDates();
     } catch (err) {
@@ -236,6 +263,7 @@ export default function TierSense() {
         alert(`Manual reset completed: ${result.message}`);
         // Refresh the page data
         fetchAvailableDates();
+        fetchTotalFiles();
       } else {
         const errorData = await response.json();
         setApiKeyWarning(errorData.message || "Manual reset failed");
@@ -291,10 +319,17 @@ export default function TierSense() {
             <div className="flex items-center space-x-3">
               <BarChart3 className="h-8 w-8 text-slate-700" />
               <h1 className="text-2xl font-semibold text-slate-900">TierSense</h1>
+              {totalFiles !== null && (
+                <span className="ml-2 text-sm text-gray-600">({totalFiles} files)</span>
+              )}
               {dailyResetInfo?.isDailyReset && (
-                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                  Daily Reset Active
-                </span>
+                <div className="flex items-center space-x-2">
+                  <span
+                    className="w-3 h-3 bg-green-400 rounded-full animate-pulse"
+                    style={{ boxShadow: '0 0 6px 2px rgba(52,211,153,0.7)' }}
+                  />
+                  <span className="text-green-600 font-medium">Daily Reset Active</span>
+                </div>
               )}
             </div>
             <div className="flex items-center space-x-2">
@@ -566,19 +601,20 @@ export default function TierSense() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    {/* Integrated Filter Controls */}
+                    {/* Integrated Filter Controls - All in one line */}
                     <div className="bg-gray-50 rounded-lg p-4 space-y-4">
                       <div className="flex items-center space-x-2 mb-3">
                         <Filter className="h-4 w-4 text-gray-600" />
                         <span className="text-sm font-medium text-gray-700">Heatmap Filters</span>
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      {/* Single row layout for all filter controls */}
+                      <div className="flex flex-wrap items-end gap-4">
                         {/* Search Type */}
-                        <div>
+                        <div className="flex-shrink-0">
                           <Label className="text-xs text-gray-600">Search Type</Label>
                           <Select value={searchType} onValueChange={setSearchType}>
-                            <SelectTrigger className="h-8">
+                            <SelectTrigger className="h-8 w-32">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -590,11 +626,11 @@ export default function TierSense() {
                           </Select>
                         </div>
 
-                        {/* Top N Files */}
-                        <div>
+                        {/* Show Files */}
+                        <div className="flex-shrink-0">
                           <Label className="text-xs text-gray-600">Show Files</Label>
                           <Select value={topN.toString()} onValueChange={(v) => setTopN(parseInt(v))}>
-                            <SelectTrigger className="h-8">
+                            <SelectTrigger className="h-8 w-24">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -606,12 +642,12 @@ export default function TierSense() {
                           </Select>
                         </div>
 
-                        {/* Conditional Date/Pattern Fields */}
+                        {/* Conditional fields based on search type */}
                         {searchType === "date" && (
-                          <div>
+                          <div className="flex-shrink-0">
                             <Label className="text-xs text-gray-600">Select Date</Label>
                             <Select value={selectedDate} onValueChange={setSelectedDate}>
-                              <SelectTrigger className="h-8">
+                              <SelectTrigger className="h-8 w-32">
                                 <SelectValue placeholder="Choose date" />
                               </SelectTrigger>
                               <SelectContent>
@@ -627,54 +663,54 @@ export default function TierSense() {
 
                         {searchType === "range" && (
                           <>
-                            <div>
+                            <div className="flex-shrink-0">
                               <Label className="text-xs text-gray-600">Start Date</Label>
                               <Input
                                 type="date"
                                 value={startDate}
                                 onChange={(e) => setStartDate(e.target.value)}
-                                className="h-8"
+                                className="h-8 w-36"
                               />
                             </div>
-                            <div>
+                            <div className="flex-shrink-0">
                               <Label className="text-xs text-gray-600">End Date</Label>
                               <Input
                                 type="date"
                                 value={endDate}
                                 onChange={(e) => setEndDate(e.target.value)}
-                                className="h-8"
+                                className="h-8 w-36"
                               />
                             </div>
                           </>
                         )}
 
                         {searchType === "pattern" && (
-                          <div>
+                          <div className="flex-shrink-0">
                             <Label className="text-xs text-gray-600">File Pattern</Label>
                             <Input
                               placeholder="e.g., .log, report, temp"
                               value={filePattern}
                               onChange={(e) => setFilePattern(e.target.value)}
-                              className="h-8"
+                              className="h-8 w-48"
                             />
                           </div>
                         )}
-                      </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex justify-end space-x-2 pt-2">
-                        <Button onClick={clearSearch} variant="outline" size="sm">
-                          Clear
-                        </Button>
-                        <Button
-                          onClick={handleAdvancedSearch}
-                          disabled={isSearching}
-                          size="sm"
-                          className="flex items-center"
-                        >
-                          <Search className="h-3 w-3 mr-1" />
-                          {isSearching ? "Searching..." : "Apply"}
-                        </Button>
+                        {/* Action buttons - aligned to the right */}
+                        <div className="flex space-x-2 ml-auto">
+                          <Button onClick={clearSearch} variant="outline" size="sm" className="h-8">
+                            Clear
+                          </Button>
+                          <Button
+                            onClick={handleAdvancedSearch}
+                            disabled={isSearching}
+                            size="sm"
+                            className="flex items-center h-8"
+                          >
+                            <Search className="h-3 w-3 mr-1" />
+                            {isSearching ? "Searching..." : "Apply"}
+                          </Button>
+                        </div>
                       </div>
                     </div>
 
