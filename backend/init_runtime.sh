@@ -45,7 +45,7 @@ output.file:
   path: "/app/logs"
   filename: "tiersense-processed-${TODAY}.ndjson"
   rotate_every_kb: 1048576
-  number_of_files: 1
+  number_of_files: 2
   permissions: 0644
 
 processors:
