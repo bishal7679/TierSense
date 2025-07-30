@@ -28,7 +28,7 @@ mkdir -p /app/logs && chmod 777 /app/logs
 log "Prepared /app/logs"
 
 # 4. Write Filebeat config - CORRECTED to use exact filename
-# TODAY=$(date +%Y-%m-%d)
+TODAY=$(date +%Y-%m-%d)
 cat <<EOF > /etc/filebeat/filebeat.yml
 filebeat.inputs:
 - type: log
@@ -43,8 +43,8 @@ filebeat.inputs:
 output.file:
   enabled: true
   path: "/app/logs"
-  filename: "tiersense-processed"
-  rotate_every_kb: 1048576
+  filename: "tiersense-processed-${TODAY}" 
+  rotate_every_kb: 1048576 # 1GB to minimize rotation
   number_of_files: 2
   permissions: 0644
 
