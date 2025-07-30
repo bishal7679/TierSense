@@ -38,11 +38,42 @@ def iso_to_dt(iso: str) -> Optional[datetime]:
         return None
 
 def find_log_files(log_dir: str, target_date: Optional[str] = None) -> List[str]:
-    """Find exactly one NDJSON log file for the specified date (or today if None)."""
+    """Find NDJSON log files that Filebeat actually creates (handles both formats)."""
     date_hyphen = target_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    expected = f"tiersense-processed-{date_hyphen}.ndjson"
-    path = os.path.join(log_dir, expected)
-    return [expected] if os.path.isfile(path) else []
+    date_compact = date_hyphen.replace("-", "")  # YYYYMMDD format
+    
+    # Look for files in order of preference
+    candidates = []
+    
+    for filename in os.listdir(log_dir):
+        if not (filename.startswith("tiersense-processed") and filename.endswith(".ndjson")):
+            continue
+            
+        # Priority 1: Exact hyphenated match (expected format)
+        if filename == f"tiersense-processed-{date_hyphen}.ndjson":
+            candidates.insert(0, filename)  # Highest priority
+            
+        # Priority 2: Files with unresolved placeholder + date (actual Filebeat output)
+        elif ("%{+YYYY-MM-dd}" in filename or "%{+yyyy-MM-dd}" in filename) and date_compact in filename:
+            candidates.append(filename)
+            
+        # Priority 3: Any file containing the target date in any format
+        elif date_hyphen in filename or date_compact in filename:
+            candidates.append(filename)
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_candidates = []
+    for candidate in candidates:
+        if candidate not in seen:
+            seen.add(candidate)
+            unique_candidates.append(candidate)
+    
+    # Sort by modification time (newest first) for files of same priority
+    if unique_candidates:
+        unique_candidates.sort(key=lambda f: os.path.getmtime(os.path.join(log_dir, f)), reverse=True)
+        
+    return unique_candidates
 
 def is_valid_file_path(path: str, prefix: str) -> bool:
     """Check if path is a valid file that should be counted."""
@@ -85,14 +116,26 @@ def get_file_stats(access_counts: Dict[str, int]) -> Dict[str, int]:
     }
 
 def cleanup_previous_day_logs(log_dir: str):
-    """Remove previous day's log files so only today's remains."""
+    """Remove previous day's log files, handling both expected and actual Filebeat formats."""
     try:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today_compact = today.replace("-", "")
+        
         for filename in os.listdir(log_dir):
-            if filename.startswith("tiersense-processed-") and filename.endswith(".ndjson"):
-                if filename != f"tiersense-processed-{today}.ndjson":
-                    os.remove(os.path.join(log_dir, filename))
-                    print(f"[INFO] Removed previous day log: {filename}")
+            if not (filename.startswith("tiersense-processed") and filename.endswith(".ndjson")):
+                continue
+                
+            # Keep today's files in any format
+            should_keep = (
+                filename == f"tiersense-processed-{today}.ndjson" or  # Expected format
+                (("%{+YYYY-MM-dd}" in filename or "%{+yyyy-MM-dd}" in filename) and today_compact in filename)  # Actual Filebeat format
+            )
+            
+            if not should_keep:
+                old_file_path = os.path.join(log_dir, filename)
+                os.remove(old_file_path)
+                print(f"[INFO] Removed previous day log: {filename}")
+                
     except Exception as e:
         print(f"[WARNING] Failed to cleanup previous day logs: {e}", file=sys.stderr)
 
@@ -119,6 +162,7 @@ def parse_logs(
         print(f"[INFO] No NDJSON logs found for {date_str} in {log_dir}")
         return {}
 
+    # Use the first (highest priority) log file
     latest_log = log_files[0]
     print(f"[INFO] Processing log: {latest_log}")
     full_path = os.path.join(log_dir, latest_log)

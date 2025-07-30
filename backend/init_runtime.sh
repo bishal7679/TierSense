@@ -29,7 +29,6 @@ log "Prepared /app/logs"
 
 # 4. Write Filebeat config
 cat <<'EOF' > /etc/filebeat/filebeat.yml
-
 filebeat.inputs:
 - type: log
   enabled: true
@@ -37,17 +36,14 @@ filebeat.inputs:
     - /var/log/audit/audit.log
   scan_frequency: 10s
   close_inactive: 5m
-  multiline:
-    pattern: '^\s'
-    match: after
   fields:
     logtype: auditd
 
 output.file:
   enabled: true
   path: "/app/logs"
-  filename: "tiersense-processed-%{+YYYY-MM-dd}.ndjson"
-  rotate_every_kb: 10485760   # 10 MB
+  filename: "tiersense-processed"
+  rotate_on_startup: false
   number_of_files: 7
   permissions: 0644
 
@@ -67,6 +63,11 @@ logging.files:
   name: filebeat
   keepfiles: 3
 EOF
+
+# Create a symbolic link to match parser expectations
+TODAY=$(date +%Y-%m-%d)
+ln -sf tiersense-processed /app/logs/tiersense-processed-${TODAY}.ndjson
+
 log "Wrote Filebeat config"
 
 # 5. Start Filebeat
