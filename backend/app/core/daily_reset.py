@@ -1,4 +1,5 @@
 # backend/app/core/daily_reset.py
+
 import os
 import schedule
 import time
@@ -28,11 +29,10 @@ def perform_daily_reset():
         # Step 2: Clean up ALL NDJSON files (including today's) to force fresh start
         removed_files = []
         for filename in os.listdir(LOG_DIR):
-            if (filename.endswith(".ndjson") and 
-                "tiersense-processed" in filename):
-                old_file_path = os.path.join(LOG_DIR, filename)
+            if filename.endswith(".ndjson") and "tiersense-processed" in filename:
+                full_path = os.path.join(LOG_DIR, filename)
                 try:
-                    os.remove(old_file_path)
+                    os.remove(full_path)
                     removed_files.append(filename)
                     logger.info(f"Removed log file during reset: {filename}")
                 except Exception as e:
@@ -47,58 +47,46 @@ def perform_daily_reset():
         
         # Step 5: Restart Filebeat to create fresh file for today
         try:
-            # Use nohup to start Filebeat in background
             with open('/app/logs/filebeat.log', 'a') as log_file:
-                subprocess.Popen([
-                    'nohup', 'filebeat', '-e', '-c', '/etc/filebeat/filebeat.yml'
-                ], stdout=log_file, stderr=subprocess.STDOUT, 
-                preexec_fn=os.setsid)  # Start new process group
+                subprocess.Popen(
+                    ['nohup', 'filebeat', '-e', '-c', '/etc/filebeat/filebeat.yml'],
+                    stdout=log_file, stderr=subprocess.STDOUT,
+                    preexec_fn=os.setsid
+                )
             time.sleep(3)  # Give Filebeat time to start
             logger.info("Restarted Filebeat for fresh file creation")
         except Exception as e:
             logger.error(f"Failed to restart Filebeat: {e}")
         
         logger.info(f"Daily reset completed for {today} - removed {len(removed_files)} files")
-        
     except Exception as e:
         logger.error(f"Daily reset failed: {e}")
 
 def run_daily_reset_scheduler():
     """Run the daily reset scheduler in background thread"""
     logger.info("Starting daily reset scheduler")
-    
-    # Schedule daily reset at midnight
     schedule.every().day.at("00:00").do(perform_daily_reset)
-    
     while True:
         try:
             schedule.run_pending()
-            time.sleep(60)  # Check every minute
+            time.sleep(60)
         except Exception as e:
             logger.error(f"Scheduler error: {e}")
             time.sleep(60)
 
 def start_background_scheduler():
     """Start the scheduler in a background thread"""
-    scheduler_thread = threading.Thread(target=run_daily_reset_scheduler, daemon=True)
-    scheduler_thread.start()
+    thread = threading.Thread(target=run_daily_reset_scheduler, daemon=True)
+    thread.start()
     logger.info("Daily reset scheduler started in background thread")
 
-# Enhanced manual reset function for testing
 def manual_reset():
-    """Manually trigger a reset (for testing purposes) - completely resets access counts"""
+    """Manually trigger a reset (for testing purposes)"""
     logger.info("Manual reset triggered")
-    
-    # Perform the same complete reset as daily reset
     perform_daily_reset()
-    
-    # Wait a moment for Filebeat to stabilize
-    time.sleep(5)
-    
-    # Verify Filebeat is running
+    time.sleep(5)  # Allow Filebeat to stabilize
     try:
-        result = subprocess.run(['pgrep', '-f', 'filebeat'], 
-                              capture_output=True, text=True)
+        result = subprocess.run(['pgrep', '-f', 'filebeat'], capture_output=True, text=True)
         if result.returncode == 0:
             logger.info("Manual reset completed - Filebeat is running")
         else:
@@ -110,20 +98,15 @@ def get_reset_status():
     """Get current reset status information"""
     try:
         today = datetime.now().strftime("%Y-%m-%d")
-        
-        # Check if today's NDJSON file exists
-        ndjson_files = [f for f in os.listdir(LOG_DIR) 
-                       if f.endswith('.ndjson') and 'tiersense-processed' in f]
-        
-        # Check if Filebeat is running
-        filebeat_running = False
+        ndjson_files = [
+            f for f in os.listdir(LOG_DIR)
+            if f.endswith('.ndjson') and 'tiersense-processed' in f
+        ]
         try:
-            result = subprocess.run(['pgrep', '-f', 'filebeat'], 
-                                  capture_output=True)
-            filebeat_running = result.returncode == 0
+            proc = subprocess.run(['pgrep', '-f', 'filebeat'], capture_output=True)
+            filebeat_running = (proc.returncode == 0)
         except:
-            pass
-        
+            filebeat_running = False
         return {
             "daily_reset_active": True,
             "reset_time": "00:00 UTC",
