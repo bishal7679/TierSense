@@ -91,7 +91,7 @@ export default function TierSense() {
     }
   };
 
-  // Advanced search
+  // ENHANCED: Advanced search with better error handling and state management
   const handleAdvancedSearch = async () => {
     setIsSearching(true);
     setApiKeyWarning("");
@@ -104,7 +104,7 @@ export default function TierSense() {
       if (selectedDirectory) {
         const monitorPath = selectedDirectory.startsWith("/host-root")
           ? selectedDirectory
-          : `/host-root${selectedDirectory}`;
+          : `/host-root${selectedDirectory.startsWith("/") ? selectedDirectory : `/${selectedDirectory}`}`;
         formData.append("directory", monitorPath);
       }
 
@@ -124,7 +124,10 @@ export default function TierSense() {
 
       if (response.ok) {
         const result = await response.json();
+        // CRITICAL FIX: Use timestamped URL to prevent caching issues
         setHeatmapUrl(`${apiUrl}${result.heatmap}?ts=${Date.now()}`);
+        
+        // ENHANCED: Create comprehensive results object
         setResults({
           heatmap: result.heatmap,
           search_info: {
@@ -134,8 +137,17 @@ export default function TierSense() {
             displayed_files: result.displayed_files,
             daily_reset: result.daily_reset,
           },
+          summary: {
+            total_files: result.total_files,
+            hot_tier: 0, // Search doesn't provide tier breakdown
+            warm_tier: 0,
+            cold_tier: 0,
+          },
+          analysis: [], // Search doesn't provide detailed analysis
         });
+        
         setTotalFiles(result.total_files);
+        setApiKeyWarning(""); // Clear any previous errors
       } else {
         const errorData = await response.json();
         setApiKeyWarning(errorData.detail || "Search failed");
@@ -148,10 +160,15 @@ export default function TierSense() {
     }
   };
 
-  // Main analysis
+  // ENHANCED: Main analysis with better state management
   const handleRunAnalysis = async () => {
     if (!apiKey) {
       setApiKeyWarning("API Key is required to run analysis.");
+      return;
+    }
+
+    if (!selectedLLM) {
+      setApiKeyWarning("Please select an LLM provider.");
       return;
     }
 
@@ -174,7 +191,8 @@ export default function TierSense() {
       }
       const monitorPath = rawDir.startsWith("/host-root")
         ? rawDir
-        : `/host-root${rawDir}`;
+        : `/host-root${rawDir.startsWith("/") ? rawDir : `/${rawDir}`}`;
+        
       try {
         const configResponse = await fetch(`${apiUrl}/configure-monitoring`, {
           method: "POST",
@@ -200,6 +218,7 @@ export default function TierSense() {
         method: "POST",
         body: formData,
       });
+      
       if (!response.ok) {
         let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
         try {
@@ -211,18 +230,30 @@ export default function TierSense() {
       }
 
       const result = await response.json();
+      
+      // CRITICAL FIX: Set all state from API response immediately
       setResults(result);
       setHeatmapUrl(`${apiUrl}${result.heatmap}?ts=${Date.now()}`);
+      
+      // ENHANCED: Set summary counts from API response
       if (result.summary) {
         setTotalFiles(result.summary.total_files);
       }
+      
+      // ENHANCED: Set daily reset info with comprehensive data
       setDailyResetInfo({
         isDailyReset: result.daily_reset,
         resetTime: result.reset_time,
         date: result.date,
         message: result.message,
       });
+      
+      // Refresh available dates after successful analysis
       fetchAvailableDates();
+      
+      // Clear any previous errors
+      setApiKeyWarning("");
+      
     } catch (err) {
       setApiKeyWarning(err instanceof Error ? err.message : "Failed to run analysis.");
     } finally {
@@ -230,19 +261,29 @@ export default function TierSense() {
     }
   };
 
-  // Manual reset
+  // ENHANCED: Manual reset with complete state cleanup
   const handleManualReset = async () => {
     try {
       const response = await fetch(`${apiUrl}/api/manual-reset`, {
         method: "POST",
       });
+      
       if (response.ok) {
         const result = await response.json();
-        alert(`Manual reset completed: ${result.message}`);
+        
+        // CRITICAL FIX: Clear all state immediately after reset
         setResults(null);
         setHeatmapUrl("");
         setTotalFiles(null);
+        setDailyResetInfo(null);
+        setApiKeyWarning("");
+        
+        // Refresh available dates
         fetchAvailableDates();
+        
+        // Show success message
+        alert(`Manual reset completed: ${result.message}`);
+        
       } else {
         const errorData = await response.json();
         setApiKeyWarning(errorData.message || "Manual reset failed");
@@ -257,6 +298,9 @@ export default function TierSense() {
     const file = e.target.files?.[0];
     if (file && file.name.endsWith(".ndjson")) {
       setUploadedFile(file);
+      setApiKeyWarning(""); // Clear any previous errors
+    } else if (file) {
+      setApiKeyWarning("Please select a valid .ndjson file.");
     }
   };
 
@@ -267,8 +311,9 @@ export default function TierSense() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = "tiersense-analysis.json";
+      link.download = `tiersense-analysis-${new Date().toISOString().split('T')[0]}.json`;
       link.click();
+      URL.revokeObjectURL(url);
     }
   };
 
@@ -285,15 +330,17 @@ export default function TierSense() {
     }
   };
 
+  // ENHANCED: Clear search with complete state reset
   const clearSearch = () => {
     setSearchType("current");
     setSelectedDate("");
     setStartDate("");
     setEndDate("");
     setFilePattern("");
-    setResults(null);
-    setHeatmapUrl("");
-    setTotalFiles(null);
+    setApiKeyWarning("");
+    
+    // CRITICAL FIX: Don't clear results and heatmap here - only clear search filters
+    // This allows users to clear search filters without losing their analysis results
   };
 
   return (
@@ -305,13 +352,19 @@ export default function TierSense() {
             <div className="flex items-center space-x-3">
               <BarChart3 className="h-8 w-8 text-slate-700" />
               <h1 className="text-2xl font-semibold text-slate-900">TierSense</h1>
+              {/* ENHANCED: Show total files count in header */}
+              {totalFiles !== null && (
+                <span className="ml-2 text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                  {totalFiles} files
+                </span>
+              )}
               {dailyResetInfo?.isDailyReset && (
                 <div className="flex items-center space-x-2">
                   <span
                     className="w-3 h-3 bg-green-400 rounded-full animate-pulse"
-                    style={{ boxShadow: "0 0 6px 2px rgba(50, 211, 98, 0.7)" }}
+                    style={{ boxShadow: "0 0 6px 2px rgba(34, 197, 94, 0.7)" }}
                   />
-                  <span className="text-green-600 font-medium" >Daily Reset Active</span>
+                  <span className="text-green-600 font-medium">Daily Reset Active</span>
                 </div>
               )}
             </div>
@@ -494,7 +547,7 @@ export default function TierSense() {
                 )}
                 <Button
                   onClick={handleRunAnalysis}
-                  disabled={!selectedLLM || isAnalyzing}
+                  disabled={!selectedLLM || isAnalyzing || !apiKey}
                   className="w-full"
                 >
                   {isAnalyzing ? (
@@ -517,6 +570,7 @@ export default function TierSense() {
           <div className="lg:col-span-2">
             {results ? (
               <div className="space-y-6">
+                {/* Daily Reset Status Banner */}
                 {dailyResetInfo?.isDailyReset && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <div className="flex items-center">
@@ -554,7 +608,7 @@ export default function TierSense() {
                     <div className="grid grid-cols-4 gap-4">
                       <div className="text-center">
                         <div className="text-2xl font-semibold text-slate-900">
-                          {results.summary?.total_files ?? 0}
+                          {results.summary?.total_files ?? results.search_info?.total_files ?? 0}
                         </div>
                         <div className="text-sm text-slate-600">Total Files</div>
                       </div>
@@ -738,7 +792,7 @@ export default function TierSense() {
                               >
                                 {file.tier}
                               </span>
-                            </div>  
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -776,6 +830,7 @@ export default function TierSense() {
         </div>
       </main>
 
+      {/* Loading Overlay */}
       {(isAnalyzing || isSearching) && (
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-8 flex flex-col items-center shadow-lg">

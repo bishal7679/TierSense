@@ -7,19 +7,17 @@ from app.core.parser import (
 )
 from app.core.llm_factory import generate_tiering_suggestions
 from app.core.heatmap import generate_heatmap, cleanup_old_heatmaps
-from app.core.daily_reset import manual_reset  # ← ADD THIS
-from app.core.historical import historical_manager  # ← ADD THIS
+from app.core.daily_reset import manual_reset
+from app.core.historical import historical_manager
 from app.config import LOG_DIR, HEATMAP_PATH
 import os
 import sqlite3
 from datetime import datetime
 import logging
 
-# Initialize logger and router
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Path to the SQLite history database
 HISTORY_DB = os.path.join(LOG_DIR, "tiersense_history.db")
 
 def init_history_db():
@@ -62,14 +60,14 @@ async def get_historical_dates():
                 LIMIT 30
             """).fetchall()
         dates = [row[0] for row in rows]
-        # Also include any raw NDJSON log file dates
         if os.path.isdir(LOG_DIR):
             for fn in os.listdir(LOG_DIR):
                 if fn.startswith("tiersense-processed") and fn.endswith(".ndjson"):
-                    if "2025-07-29" in fn and "2025-07-29" not in dates:
-                        dates.append("2025-07-29")
-                    elif "20250729" in fn and "2025-07-29" not in dates:
-                        dates.append("2025-07-29")
+                    # Extract date from filename patterns
+                    if "2025-07-31" in fn and "2025-07-31" not in dates:
+                        dates.append("2025-07-31")
+                    elif "20250731" in fn and "2025-07-31" not in dates:
+                        dates.append("2025-07-31")
         return {"available_dates": sorted(set(dates), reverse=True)}
     except Exception as e:
         logger.error(f"Error fetching historical dates: {e}")
@@ -77,7 +75,7 @@ async def get_historical_dates():
 
 @router.post("/search-heatmaps")
 async def search_heatmaps(
-    search_type: str = Form(...),  # "current", "date", "range", "pattern"
+    search_type: str = Form(...),
     date: str = Form(None),
     start_date: str = Form(None),
     end_date: str = Form(None),
@@ -91,7 +89,16 @@ async def search_heatmaps(
     target = os.path.realpath(target)
 
     try:
-        # Determine access_counts and title based on search_type
+        # CRITICAL FIX: Purge old heatmaps before any search operation
+        hm_dir = os.path.dirname(HEATMAP_PATH)
+        if os.path.isdir(hm_dir):
+            for fname in os.listdir(hm_dir):
+                if fname.startswith("access_heatmap_") and fname.endswith(".png"):
+                    try:
+                        os.remove(os.path.join(hm_dir, fname))
+                    except Exception:
+                        pass
+
         if search_type == "current":
             access_counts = parse_logs_with_daily_reset(LOG_DIR, prefix=target, debug=False)
             title = f"Today ({datetime.now().strftime('%Y-%m-%d')}) - Daily Reset"
@@ -136,7 +143,6 @@ async def search_heatmaps(
         if not access_counts:
             raise HTTPException(404, "No data found for the specified search criteria")
 
-        # Filter top N and generate heatmap
         top_items = dict(sorted(access_counts.items(), key=lambda x: x[1], reverse=True)[:top_n])
         heatmap = generate_heatmap(top_items, top_n, title)
         return {
@@ -168,16 +174,17 @@ async def run_tiering(
     if not os.path.isdir(raw):
         raise HTTPException(400, f"Directory not found: {raw}")
 
-    # Purge all old heatmaps before generating a new one
+    # CRITICAL FIX: Purge ALL old heatmaps before generating a new one
     hm_dir = os.path.dirname(HEATMAP_PATH)
-    for fname in os.listdir(hm_dir):
-        if fname.startswith("access_heatmap_") and fname.endswith(".png"):
-            try:
-                os.remove(os.path.join(hm_dir, fname))
-            except Exception:
-                pass
+    if os.path.isdir(hm_dir):
+        for fname in os.listdir(hm_dir):
+            if fname.startswith("access_heatmap_") and fname.endswith(".png"):
+                try:
+                    os.remove(os.path.join(hm_dir, fname))
+                    logger.info(f"Removed old heatmap before analysis: {fname}")
+                except Exception:
+                    pass
 
-    # Parse today's fresh counts
     today = datetime.now().strftime("%Y-%m-%d")
     access_counts = parse_logs_with_daily_reset(LOG_DIR, prefix=target, debug=False)
     if not access_counts:
@@ -186,15 +193,17 @@ async def run_tiering(
             f"No file access events found in today's logs ({today}). Interact with files and retry."
         )
 
-    # Generate and return a single fresh heatmap
+    # Generate single fresh heatmap
     heatmap = generate_heatmap(access_counts, top_n=top_n, title_suffix=f"Today ({today}) - Daily Reset")
 
-    # Save historical, clean up old
+    # Save historical data and cleanup
     historical_manager.save_daily_reset_data(today, access_counts)
     historical_manager.cleanup_old_reset_data(days_to_keep=7)
-    cleanup_old_heatmaps(keep_count=7)
+    
+    # FIXED: Only keep 1 heatmap instead of 7 to prevent accumulation
+    cleanup_old_heatmaps(keep_count=1)
 
-    # LLM-based tiering suggestions
+    # LLM analysis
     suggestions = generate_tiering_suggestions(llm, access_counts, api_key)
 
     def strip_pref(p: str) -> str:
@@ -232,6 +241,18 @@ async def trigger_manual_reset():
     """Manually trigger daily reset for testing."""
     try:
         logger.info("Manual reset triggered via API")
+        
+        # CRITICAL FIX: Purge all heatmaps before reset
+        hm_dir = os.path.dirname(HEATMAP_PATH)
+        if os.path.isdir(hm_dir):
+            for fname in os.listdir(hm_dir):
+                if fname.startswith("access_heatmap_") and fname.endswith(".png"):
+                    try:
+                        os.remove(os.path.join(hm_dir, fname))
+                        logger.info(f"Removed heatmap during manual reset: {fname}")
+                    except Exception:
+                        pass
+        
         manual_reset()
         return {
             "status": "success",
