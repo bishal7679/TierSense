@@ -1,4 +1,5 @@
 import os
+import json
 from dotenv import load_dotenv
 
 # Load .env file if present (useful for local development or defaults)
@@ -34,3 +35,27 @@ def get_audit_directory():
 def get_target_log_prefix():
     """Returns a path prefix used to filter logs, default is /mnt"""
     return os.getenv("TARGET_LOG_PREFIX", "/mnt")
+
+# --- 8. Tier ranges (loaded from settings file) ---
+def load_tier_ranges():
+    """
+    Load user-configurable tier ranges from settings.json.
+    Returns dict:
+      {
+        "HOT": [min_access or None, max_access or None],
+        "WARM": [min_access or None, max_access or None],
+        "COLD": [min_access or None, max_access or None]
+      }
+    """
+    SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
+    try:
+        with open(SETTINGS_FILE, "r") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        data = {}
+
+    return data.get("tier_ranges", {
+        "HOT": [None, None],
+        "WARM": [None, None],
+        "COLD": [None, None]
+    })

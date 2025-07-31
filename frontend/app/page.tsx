@@ -1,7 +1,6 @@
 "use client";
 
-import type React from "react";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Download,
   Settings,
@@ -49,6 +48,14 @@ export default function TierSense() {
   const [apiKeyWarning, setApiKeyWarning] = useState("");
   const [selectedDirectory, setSelectedDirectory] = useState("");
 
+  // Tier ranges (HOT, WARM, COLD)
+  const [tierRanges, setTierRanges] = useState<{ [key: string]: [number | null, number | null] }>({
+    HOT: [100, null],
+    WARM: [20, 99],
+    COLD: [null, 19],
+  });
+  const [tierError, setTierError] = useState("");
+
   // Daily reset and historical state
   const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [heatmapUrl, setHeatmapUrl] = useState("");
@@ -68,17 +75,33 @@ export default function TierSense() {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+  // Load API key and dates on mount
   useEffect(() => {
     const savedKey = localStorage.getItem("tiersense_api_key");
     if (savedKey) setApiKey(savedKey);
     fetchAvailableDates();
   }, []);
 
+  // Persist API key
   useEffect(() => {
     if (apiKey) localStorage.setItem("tiersense_api_key", apiKey);
   }, [apiKey]);
 
-  // Fetch available dates
+  // Load settings including tierRanges when dialog opens
+  useEffect(() => {
+    if (showSettings) {
+      fetch(`${apiUrl}/api/settings`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.api_key) setApiKey(data.api_key);
+          if (data.default_llm) setSelectedLLM(data.default_llm);
+          if (data.tier_ranges) setTierRanges(data.tier_ranges);
+        })
+        .catch(console.error);
+    }
+  }, [showSettings]);
+
+  // Fetch available historical dates
   const fetchAvailableDates = async () => {
     try {
       const response = await fetch(`${apiUrl}/api/historical-dates`);
@@ -91,7 +114,7 @@ export default function TierSense() {
     }
   };
 
-  // ENHANCED: Advanced search with better error handling and state management
+  // Advanced search handler
   const handleAdvancedSearch = async () => {
     setIsSearching(true);
     setApiKeyWarning("");
@@ -128,22 +151,22 @@ export default function TierSense() {
         setResults({
           ...results,
           heatmap: result.heatmap,
-          // CRITICAL FIX: Use summary from result if available, otherwise create from result data
-          summary: result.summary || {
-            total_files: result.total_files || 0,
-            hot_tier: result.hot_tier || 0,
-            warm_tier: result.warm_tier || 0,
-            cold_tier: result.cold_tier || 0
-          },
+          summary:
+            result.summary || {
+              total_files: result.total_files || 0,
+              hot_tier: result.hot_tier || 0,
+              warm_tier: result.warm_tier || 0,
+              cold_tier: result.cold_tier || 0,
+            },
           search_info: {
             type: result.search_type,
             title: result.title,
             total_files: result.total_files,
             displayed_files: result.displayed_files,
-            daily_reset: result.daily_reset
-          }
+            daily_reset: result.daily_reset,
+          },
         });
-      }  else {
+      } else {
         const errorData = await response.json();
         setApiKeyWarning(errorData.detail || "Search failed");
       }
@@ -155,13 +178,12 @@ export default function TierSense() {
     }
   };
 
-  // ENHANCED: Main analysis with better state management
+  // Main analysis handler
   const handleRunAnalysis = async () => {
     if (!apiKey) {
       setApiKeyWarning("API Key is required to run analysis.");
       return;
     }
-
     if (!selectedLLM) {
       setApiKeyWarning("Please select an LLM provider.");
       return;
@@ -187,7 +209,7 @@ export default function TierSense() {
       const monitorPath = rawDir.startsWith("/host-root")
         ? rawDir
         : `/host-root${rawDir.startsWith("/") ? rawDir : `/${rawDir}`}`;
-        
+
       try {
         const configResponse = await fetch(`${apiUrl}/configure-monitoring`, {
           method: "POST",
@@ -213,7 +235,6 @@ export default function TierSense() {
         method: "POST",
         body: formData,
       });
-      
       if (!response.ok) {
         let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
         try {
@@ -225,30 +246,19 @@ export default function TierSense() {
       }
 
       const result = await response.json();
-      
-      // CRITICAL FIX: Set all state from API response immediately
       setResults(result);
       setHeatmapUrl(`${apiUrl}${result.heatmap}?ts=${Date.now()}`);
-      
-      // ENHANCED: Set summary counts from API response
       if (result.summary) {
         setTotalFiles(result.summary.total_files);
       }
-      
-      // ENHANCED: Set daily reset info with comprehensive data
       setDailyResetInfo({
         isDailyReset: result.daily_reset,
         resetTime: result.reset_time,
         date: result.date,
         message: result.message,
       });
-      
-      // Refresh available dates after successful analysis
       fetchAvailableDates();
-      
-      // Clear any previous errors
       setApiKeyWarning("");
-      
     } catch (err) {
       setApiKeyWarning(err instanceof Error ? err.message : "Failed to run analysis.");
     } finally {
@@ -256,29 +266,19 @@ export default function TierSense() {
     }
   };
 
-  // ENHANCED: Manual reset with complete state cleanup
+  // Manual reset handler
   const handleManualReset = async () => {
     try {
-      const response = await fetch(`${apiUrl}/api/manual-reset`, {
-        method: "POST",
-      });
-      
+      const response = await fetch(`${apiUrl}/api/manual-reset`, { method: "POST" });
       if (response.ok) {
         const result = await response.json();
-        
-        // CRITICAL FIX: Clear all state immediately after reset
         setResults(null);
         setHeatmapUrl("");
         setTotalFiles(null);
         setDailyResetInfo(null);
         setApiKeyWarning("");
-        
-        // Refresh available dates
         fetchAvailableDates();
-        
-        // Show success message
         alert(`Manual reset completed: ${result.message}`);
-        
       } else {
         const errorData = await response.json();
         setApiKeyWarning(errorData.message || "Manual reset failed");
@@ -289,16 +289,18 @@ export default function TierSense() {
     }
   };
 
+  // File upload handler
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.name.endsWith(".ndjson")) {
       setUploadedFile(file);
-      setApiKeyWarning(""); // Clear any previous errors
+      setApiKeyWarning("");
     } else if (file) {
       setApiKeyWarning("Please select a valid .ndjson file.");
     }
   };
 
+  // Export results as JSON
   const exportResults = () => {
     if (results) {
       const dataStr = JSON.stringify(results, null, 2);
@@ -306,12 +308,13 @@ export default function TierSense() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `tiersense-analysis-${new Date().toISOString().split('T')[0]}.json`;
+      link.download = `tiersense-analysis-${new Date().toISOString().split("T")[0]}.json`;
       link.click();
       URL.revokeObjectURL(url);
     }
   };
 
+  // Tier color helper
   const getTierColor = (tier: string) => {
     switch (tier) {
       case "HOT":
@@ -325,7 +328,7 @@ export default function TierSense() {
     }
   };
 
-  // ENHANCED: Clear search with complete state reset
+  // Clear only filters (not results)
   const clearSearch = () => {
     setSearchType("current");
     setSelectedDate("");
@@ -333,9 +336,6 @@ export default function TierSense() {
     setEndDate("");
     setFilePattern("");
     setApiKeyWarning("");
-    
-    // CRITICAL FIX: Don't clear results and heatmap here - only clear search filters
-    // This allows users to clear search filters without losing their analysis results
   };
 
   return (
@@ -347,7 +347,6 @@ export default function TierSense() {
             <div className="flex items-center space-x-3">
               <BarChart3 className="h-8 w-8 text-slate-700" />
               <h1 className="text-2xl font-semibold text-slate-900">TierSense</h1>
-              {/* ENHANCED: Show total files count in header */}
               {totalFiles !== null && (
                 <span className="ml-2 text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded">
                   {totalFiles} files
@@ -357,7 +356,7 @@ export default function TierSense() {
                 <div className="flex items-center space-x-2">
                   <span
                     className="w-3 h-3 bg-green-400 rounded-full animate-pulse"
-                    style={{ boxShadow: "0 0 6px 2px rgba(34, 197, 94, 0.7)" }}
+                    style={{ boxShadow: "0 0 6px 2px rgba(34,197,94,0.7)" }}
                   />
                   <span className="text-green-600 font-medium">Daily Reset Active</span>
                 </div>
@@ -402,17 +401,82 @@ export default function TierSense() {
                           className="absolute inset-y-0 right-0 flex items-center px-2 text-slate-500"
                           tabIndex={-1}
                         >
-                          {showApiKey ? (
-                            <EyeOff className="h-5 w-5" />
-                          ) : (
-                            <Eye className="h-5 w-5" />
-                          )}
+                          {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                         </button>
                       </div>
                     </div>
-                    <Button onClick={() => setShowSettings(false)} className="w-full">
-                      Save Configuration
-                    </Button>
+
+                    {/* Tier Ranges */}
+                    <div className="mt-4 pt-4 border-t">
+                      <DialogTitle className="text-base">Tier Ranges</DialogTitle>
+                      {(["HOT", "WARM", "COLD"] as const).map((tier) => (
+                        <div key={tier} className="flex items-center gap-2 mt-2">
+                          <Label className="w-12">{tier}</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder="min"
+                            value={tierRanges[tier][0] ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value === "" ? null : parseInt(e.target.value, 10);
+                              setTierRanges((prev) => ({ ...prev, [tier]: [v, prev[tier][1]] }));
+                            }}
+                            className="w-20"
+                          />
+                          <span>-</span>
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder="max"
+                            value={tierRanges[tier][1] ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value === "" ? null : parseInt(e.target.value, 10);
+                              setTierRanges((prev) => ({ ...prev, [tier]: [prev[tier][0], v] }));
+                            }}
+                            className="w-20"
+                          />
+                        </div>
+                      ))}
+                      {tierError && <p className="text-xs text-red-600 mt-1">{tierError}</p>}
+                      <Button
+                        variant="secondary"
+                        className="w-full mt-3"
+                        onClick={async () => {
+                          // Simple validation example
+                          if (
+                            tierRanges.HOT[0] !== null &&
+                            tierRanges.WARM[1] !== null &&
+                            tierRanges.HOT[0]! <= tierRanges.WARM[1]!
+                          ) {
+                            setTierError("HOT min must exceed WARM max");
+                            return;
+                          }
+                          setTierError("");
+                          // Save settings & tierRanges
+                          const payload = {
+                            api_key: apiKey,
+                            default_llm: selectedLLM,
+                            tier_ranges: tierRanges,
+                          };
+                          try {
+                            const resp = await fetch(`${apiUrl}/api/settings`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify(payload),
+                            });
+                            if (resp.ok) setShowSettings(false);
+                            else {
+                              const err = await resp.json();
+                              setTierError(err.detail || "Failed saving settings");
+                            }
+                          } catch {
+                            setTierError("Network error saving settings");
+                          }
+                        }}
+                      >
+                        Save Configuration & Tier Ranges
+                      </Button>
+                    </div>
                   </div>
                 </DialogContent>
               </Dialog>
@@ -421,10 +485,10 @@ export default function TierSense() {
         </div>
       </header>
 
-      {/* Main */}
+      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Config */}
+          {/* Analysis Config */}
           <div className="lg:col-span-1">
             <Card>
               <CardHeader>
@@ -445,30 +509,6 @@ export default function TierSense() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div>
-                  <Label htmlFor="api-key">API Key</Label>
-                  <div className="relative">
-                    <Input
-                      id="api-key"
-                      type={showApiKey ? "text" : "password"}
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="Enter API key"
-                      className="pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowApiKey((v) => !v)}
-                      className="absolute inset-y-0 right-0 flex items-center px-2 text-slate-500"
-                      tabIndex={-1}
-                    >
-                      {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-                  {apiKeyWarning && (
-                    <p className="text-xs text-red-600 mt-1">{apiKeyWarning}</p>
-                  )}
                 </div>
                 <div>
                   <Label>Data Source</Label>
@@ -533,9 +573,7 @@ export default function TierSense() {
                         className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100"
                       />
                       {uploadedFile && (
-                        <p className="mt-2 text-sm text-slate-600">
-                          Selected: {uploadedFile.name}
-                        </p>
+                        <p className="mt-2 text-sm text-slate-600">Selected: {uploadedFile.name}</p>
                       )}
                     </div>
                   </div>
@@ -557,31 +595,28 @@ export default function TierSense() {
                     </>
                   )}
                 </Button>
+                {apiKeyWarning && <p className="text-xs text-red-600 mt-1">{apiKeyWarning}</p>}
               </CardContent>
             </Card>
           </div>
 
-          {/* Results */}
+          {/* Results Panel */}
           <div className="lg:col-span-2">
             {results ? (
               <div className="space-y-6">
-                {/* Daily Reset Status Banner */}
+                {/* Daily Reset Banner */}
                 {dailyResetInfo?.isDailyReset && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <div className="flex items-center">
                       <Calendar className="h-5 w-5 text-blue-600 mr-3" />
                       <div>
-                        <h3 className="text-sm font-medium text-blue-800">
-                          Daily Reset Active
-                        </h3>
+                        <h3 className="text-sm font-medium text-blue-800">Daily Reset Active</h3>
                         <p className="text-xs text-blue-600 mt-1">
                           Access counts reset daily at {dailyResetInfo.resetTime} | Current date:{" "}
                           {dailyResetInfo.date}
                         </p>
                         {dailyResetInfo.message && (
-                          <p className="text-xs text-blue-600 mt-1">
-                            {dailyResetInfo.message}
-                          </p>
+                          <p className="text-xs text-blue-600 mt-1">{dailyResetInfo.message}</p>
                         )}
                       </div>
                     </div>
@@ -590,7 +625,7 @@ export default function TierSense() {
 
                 {/* Summary */}
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between">
+                  <CardHeader className="flex items-center justify-between">
                     <CardTitle className="text-lg font-medium">
                       {results.search_info?.title || "Analysis Summary"}
                     </CardTitle>
@@ -600,26 +635,26 @@ export default function TierSense() {
                     </Button>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-4 gap-4">
-                      <div className="text-center">
+                    <div className="grid grid-cols-4 gap-4 text-center">
+                      <div>
                         <div className="text-2xl font-semibold text-slate-900">
                           {results.summary?.total_files ?? results.search_info?.total_files ?? 0}
                         </div>
                         <div className="text-sm text-slate-600">Total Files</div>
                       </div>
-                      <div className="text-center">
+                      <div>
                         <div className="text-2xl font-semibold text-red-600">
                           {results.summary?.hot_tier ?? 0}
                         </div>
                         <div className="text-sm text-slate-600">HOT</div>
                       </div>
-                      <div className="text-center">
+                      <div>
                         <div className="text-2xl font-semibold text-yellow-600">
                           {results.summary?.warm_tier ?? 0}
                         </div>
                         <div className="text-sm text-slate-600">WARM</div>
                       </div>
-                      <div className="text-center">
+                      <div>
                         <div className="text-2xl font-semibold text-blue-600">
                           {results.summary?.cold_tier ?? 0}
                         </div>
@@ -632,19 +667,19 @@ export default function TierSense() {
                 {/* Heatmap & Filters */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg font-medium flex items-center">
+                    <CardTitle className="flex items-center text-lg font-medium">
                       <BarChart3 className="h-5 w-5 mr-2" />
                       Access Heatmap & Filters
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="bg-gray-50 rounded-lg p-4 space-y-4">
-                      <div className="flex items-center space-x-2 mb-3">
+                      <div className="flex items-center mb-3 space-x-2">
                         <Filter className="h-4 w-4 text-gray-600" />
                         <span className="text-sm font-medium text-gray-700">Heatmap Filters</span>
                       </div>
                       <div className="flex flex-wrap items-end gap-4">
-                        <div className="flex-shrink-0">
+                        <div>
                           <Label className="text-xs text-gray-600">Search Type</Label>
                           <Select value={searchType} onValueChange={setSearchType}>
                             <SelectTrigger className="h-8 w-32">
@@ -658,7 +693,7 @@ export default function TierSense() {
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="flex-shrink-0">
+                        <div>
                           <Label className="text-xs text-gray-600">Show Files</Label>
                           <Select value={topN.toString()} onValueChange={(v) => setTopN(+v)}>
                             <SelectTrigger className="h-8 w-24">
@@ -673,7 +708,7 @@ export default function TierSense() {
                           </Select>
                         </div>
                         {searchType === "date" && (
-                          <div className="flex-shrink-0">
+                          <div>
                             <Label className="text-xs text-gray-600">Select Date</Label>
                             <Select value={selectedDate} onValueChange={setSelectedDate}>
                               <SelectTrigger className="h-8 w-32">
@@ -691,7 +726,7 @@ export default function TierSense() {
                         )}
                         {searchType === "range" && (
                           <>
-                            <div className="flex-shrink-0">
+                            <div>
                               <Label className="text-xs text-gray-600">Start Date</Label>
                               <Input
                                 type="date"
@@ -700,7 +735,7 @@ export default function TierSense() {
                                 className="h-8 w-36"
                               />
                             </div>
-                            <div className="flex-shrink-0">
+                            <div>
                               <Label className="text-xs text-gray-600">End Date</Label>
                               <Input
                                 type="date"
@@ -712,17 +747,17 @@ export default function TierSense() {
                           </>
                         )}
                         {searchType === "pattern" && (
-                          <div className="flex-shrink-0">
+                          <div>
                             <Label className="text-xs text-gray-600">File Pattern</Label>
                             <Input
-                              placeholder="e.g., .log, report, temp"
+                              placeholder="e.g., .log, report"
                               value={filePattern}
                               onChange={(e) => setFilePattern(e.target.value)}
                               className="h-8 w-48"
                             />
                           </div>
                         )}
-                        <div className="flex space-x-2 ml-auto">
+                        <div className="flex ml-auto space-x-2">
                           <Button onClick={clearSearch} variant="outline" size="sm" className="h-8">
                             Clear
                           </Button>
@@ -730,7 +765,7 @@ export default function TierSense() {
                             onClick={handleAdvancedSearch}
                             disabled={isSearching}
                             size="sm"
-                            className="flex items-center h-8"
+                            className="h-8 flex items-center"
                           >
                             <Search className="h-3 w-3 mr-1" />
                             {isSearching ? "Searching..." : "Apply"}
@@ -751,8 +786,8 @@ export default function TierSense() {
                           }}
                         />
                       ) : (
-                        <div className="text-slate-500 py-8">
-                          <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <div className="py-8 text-slate-500">
+                          <BarChart3 className="mx-auto mb-4 h-12 w-12 opacity-50" />
                           <p>Heatmap will appear here after analysis</p>
                         </div>
                       )}
@@ -760,7 +795,7 @@ export default function TierSense() {
                   </CardContent>
                 </Card>
 
-                {/* File Analysis */}
+                {/* File Analysis Section */}
                 {results.analysis?.length > 0 && (
                   <Card>
                     <CardHeader>
@@ -773,21 +808,19 @@ export default function TierSense() {
                             key={idx}
                             className="flex items-center justify-between p-3 border rounded-lg"
                           >
-                            <div className="flex-1">
+                            <div>
                               <div className="font-medium text-sm">{file.path}</div>
                               <div className="text-xs text-slate-500">
                                 Access frequency: {file.access_frequency}
                               </div>
                             </div>
-                            <div className="flex items-center space-x-2">
-                              <span
-                                className={`px-2 py-1 text-xs rounded text-white ${getTierColor(
-                                  file.tier
-                                )}`}
-                              >
-                                {file.tier}
-                              </span>
-                            </div>
+                            <span
+                              className={`px-2 py-1 text-xs text-white rounded ${getTierColor(
+                                file.tier
+                              )}`}
+                            >
+                              {file.tier}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -798,7 +831,7 @@ export default function TierSense() {
                 {/* JSON Output */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg font-medium flex items-center">
+                    <CardTitle className="flex items-center text-lg font-medium">
                       <FileText className="h-5 w-5 mr-2" />
                       JSON Output
                     </CardTitle>
@@ -807,15 +840,15 @@ export default function TierSense() {
                     <Textarea
                       value={JSON.stringify(results, null, 2)}
                       readOnly
-                      className="font-mono text-sm h-64 resize-none"
+                      className="h-64 resize-none font-mono text-sm"
                     />
                   </CardContent>
                 </Card>
               </div>
             ) : (
-              <Card className="h-96 flex items-center justify-center">
+              <Card className="flex items-center justify-center h-96">
                 <div className="text-center text-slate-500">
-                  <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <BarChart3 className="mx-auto mb-4 h-12 w-12 opacity-50" />
                   <p className="text-lg font-medium">No Analysis Results</p>
                   <p className="text-sm">Configure your settings and run an analysis to see results</p>
                 </div>
@@ -827,15 +860,13 @@ export default function TierSense() {
 
       {/* Loading Overlay */}
       {(isAnalyzing || isSearching) && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-8 flex flex-col items-center shadow-lg">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mb-4"></div>
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
+          <div className="flex flex-col items-center p-8 bg-white rounded-lg shadow-lg">
+            <div className="h-12 w-12 mb-4 animate-spin rounded-full border-b-4 border-blue-600"></div>
             <div className="text-lg font-medium text-slate-800">
-              {isAnalyzing
-                ? "TierSense is analyzing your data..."
-                : "Searching heatmaps..."}
+              {isAnalyzing ? "TierSense is analyzing your data..." : "Searching heatmaps..."}
             </div>
-            <div className="text-sm text-slate-500 mt-2">This may take a few moments</div>
+            <div className="mt-2 text-sm text-slate-500">This may take a few moments</div>
           </div>
         </div>
       )}

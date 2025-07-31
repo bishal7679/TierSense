@@ -1,0 +1,11 @@
+// backend/app/settings.json
+
+{
+  "api_key": "…",
+  "default_llm": "gemini",
+  "tier_ranges": {
+    "HOT": [null, null],
+    "WARM": [null, null],
+    "COLD": [null, null]
+  }
+}
