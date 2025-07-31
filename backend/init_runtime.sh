@@ -25,12 +25,18 @@ fi
 
 # 3. Prepare logs dir and clean up previous files
 mkdir -p /app/logs && chmod 777 /app/logs
+log "Ensured /app/logs directory"
 
-# Clean up all previous NDJSON files to ensure fresh start
+# 4. Purge any existing heatmap images
+HEATMAP_DIR="/app/logs"
+log "Purging old access heatmaps in ${HEATMAP_DIR}"
+rm -f "${HEATMAP_DIR}/access_heatmap_"*.png || true
+
+# 5. Clean up all previous NDJSON files to ensure fresh start
 rm -f /app/logs/tiersense-processed*.ndjson
 log "Cleaned up previous NDJSON files"
 
-# 4. Write Filebeat config - CORRECTED
+# 6. Write Filebeat config
 TODAY=$(date +%Y-%m-%d)
 cat <<EOF > /etc/filebeat/filebeat.yml
 filebeat.inputs:
@@ -67,10 +73,9 @@ logging.files:
   name: filebeat
   keepfiles: 3
 EOF
-
 log "Wrote Filebeat config for ${TODAY}"
 
-# 5. Start Filebeat
+# 7. Start Filebeat
 pkill -f filebeat || true
 nohup filebeat -e -c /etc/filebeat/filebeat.yml >>/app/logs/filebeat.log 2>&1 &
 sleep 3
@@ -80,7 +85,7 @@ if ! pgrep -f filebeat >/dev/null; then
 fi
 log "Filebeat started"
 
-# 6. Validate audit rules
+# 8. Validate audit rules
 RULES_COUNT=$(auditctl -l | wc -l)
 if [ "$RULES_COUNT" -eq 0 ]; then
   log "WARNING: No audit rules found. Configure via TierSense UI."
@@ -90,5 +95,5 @@ fi
 
 log "Initialized log file for ${TODAY}"
 
-# 7. Start FastAPI
+# 9. Start FastAPI
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --log-level info
