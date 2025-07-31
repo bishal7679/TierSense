@@ -305,6 +305,8 @@ def parse_logs_with_daily_reset(
     """
     Parse logs with daily reset - each day starts with 0 access counts
     """
+    # Ensure prior-day NDJSONs are removed before parsing today's file
+    cleanup_previous_day_logs(log_dir)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     access_counts = parse_logs(
         log_dir=log_dir,
