@@ -6,7 +6,6 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Optional, List, Tuple
 
-
 # Regex patterns for parsing audit messages
 AUDIT_ID_RE = re.compile(r"msg=audit\((\d+\.\d+:\d+)\)")
 HEX_RE = re.compile(r"(?:\\x[0-9a-fA-F]{2})+")
@@ -14,7 +13,6 @@ FIELD_RES = {
     "path": re.compile(r'name="([^"]+)"'),
     "cwd":  re.compile(r'cwd="([^"]+)"'),
 }
-
 
 def _unhex(match_obj) -> str:
     """Convert hex-encoded bytes to UTF-8 string."""
@@ -24,13 +22,11 @@ def _unhex(match_obj) -> str:
     except ValueError:
         return match_obj.group(0)
 
-
 def decode_escapes(val: str) -> str:
     """Decode hex escapes and remove backslashes."""
     if not val:
         return ""
     return HEX_RE.sub(_unhex, val).replace("\\", "")
-
 
 def iso_to_dt(iso: str) -> Optional[datetime]:
     """Convert ISO-8601 timestamp to timezone-aware datetime."""
@@ -40,7 +36,6 @@ def iso_to_dt(iso: str) -> Optional[datetime]:
         return datetime.fromisoformat(iso.replace("Z", "+00:00"))
     except ValueError:
         return None
-
 
 def find_log_files(log_dir: str, target_date: Optional[str] = None) -> List[str]:
     """
@@ -118,7 +113,6 @@ def find_log_files(log_dir: str, target_date: Optional[str] = None) -> List[str]
     full_path = os.path.join(log_dir, expected)
     return [expected] if os.path.isfile(full_path) else []
 
-
 def is_valid_file_path(path: str, prefix: str) -> bool:
     """Check if path is a valid file that should be counted."""
     if not path:
@@ -143,7 +137,6 @@ def is_valid_file_path(path: str, prefix: str) -> bool:
             return False
     return True
 
-
 def get_file_stats(access_counts: Dict[str, int]) -> Dict[str, int]:
     """Get statistics about file access patterns."""
     if not access_counts:
@@ -159,7 +152,6 @@ def get_file_stats(access_counts: Dict[str, int]) -> Dict[str, int]:
         "min_access": min(counts),
         "avg_access": sum(counts) / len(counts),
     }
-
 
 def cleanup_previous_day_logs(log_dir: str):
     """
@@ -185,7 +177,6 @@ def cleanup_previous_day_logs(log_dir: str):
                     print(f"[INFO] Removed previous day log: {filename}")
     except Exception as e:
         print(f"[WARNING] Failed to cleanup previous day logs: {e}", file=sys.stderr)
-
 
 def parse_logs(
     log_dir: str = "/app/logs",
@@ -296,7 +287,6 @@ def parse_logs(
 
     return counts
 
-
 def parse_logs_with_daily_reset(
     log_dir: str = "/app/logs",
     prefix: str = "",
@@ -305,8 +295,9 @@ def parse_logs_with_daily_reset(
     """
     Parse logs with daily reset - each day starts with 0 access counts
     """
-    # Ensure prior-day NDJSONs are removed before parsing today's file
+    # CRITICAL FIX: Ensure prior-day NDJSONs are removed before parsing today's file
     cleanup_previous_day_logs(log_dir)
+    
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     access_counts = parse_logs(
         log_dir=log_dir,
@@ -318,7 +309,6 @@ def parse_logs_with_daily_reset(
         print(f"[DEBUG] Daily reset parsing for {today}")
         print(f"[DEBUG] Found {len(access_counts)} files with fresh daily counts")
     return access_counts
-
 
 def parse_logs_for_date(
     log_dir: str = "/app/logs",
@@ -336,7 +326,6 @@ def parse_logs_for_date(
         target_date=target_date
     )
 
-
 def cleanup_old_logs(log_dir: str, days_to_keep: int = 7) -> None:
     """Clean up old log files, keeping only recent ones (daily reset version)."""
     try:
@@ -353,12 +342,10 @@ def cleanup_old_logs(log_dir: str, days_to_keep: int = 7) -> None:
     except Exception as e:
         print(f"[WARNING] Failed to cleanup old logs: {e}", file=sys.stderr)
 
-
 def get_today_counts_only() -> Dict[str, int]:
     """Get only today's access counts for daily reset functionality"""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return parse_logs_with_daily_reset(prefix="", debug=False, log_dir="/app/logs")
-
 
 # CLI interface for testing
 def main():
