@@ -206,6 +206,11 @@ async def run_tiering(
     # LLM analysis
     suggestions = generate_tiering_suggestions(llm, access_counts, api_key)
 
+    # CRITICAL FIX: Calculate tier summary directly from access_counts BEFORE filtering
+    hot_tier = sum(1 for count in access_counts.values() if count >= 100)
+    warm_tier = sum(1 for count in access_counts.values() if 20 <= count < 100)
+    cold_tier = sum(1 for count in access_counts.values() if count < 20)
+
     def strip_pref(p: str) -> str:
         return p.replace("/host-root", "", 1) if p.startswith("/host-root") else p
 
@@ -217,11 +222,12 @@ async def run_tiering(
         ent["path"] = path
         analysis.append(ent)
 
+    # CRITICAL FIX: Use calculated tier counts from access_counts instead of filtered analysis
     summary = {
-        "total_files": len(analysis),
-        "hot_tier": sum(1 for e in analysis if e["tier"] == "HOT"),
-        "warm_tier": sum(1 for e in analysis if e["tier"] == "WARM"),
-        "cold_tier": sum(1 for e in analysis if e["tier"] == "COLD"),
+        "total_files": len(access_counts),  # Use access_counts for total, not filtered analysis
+        "hot_tier": hot_tier,              # Use calculated counts from access_counts
+        "warm_tier": warm_tier,            # Use calculated counts from access_counts
+        "cold_tier": cold_tier,            # Use calculated counts from access_counts
     }
 
     return JSONResponse({
