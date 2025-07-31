@@ -143,6 +143,11 @@ async def search_heatmaps(
         if not access_counts:
             raise HTTPException(404, "No data found for the specified search criteria")
 
+        # CRITICAL FIX: Calculate tier summary directly from access_counts for search-heatmaps
+        hot_tier = sum(1 for count in access_counts.values() if count >= 100)
+        warm_tier = sum(1 for count in access_counts.values() if 20 <= count < 100)
+        cold_tier = sum(1 for count in access_counts.values() if count < 20)
+
         top_items = dict(sorted(access_counts.items(), key=lambda x: x[1], reverse=True)[:top_n])
         heatmap = generate_heatmap(top_items, top_n, title)
         return {
@@ -152,7 +157,11 @@ async def search_heatmaps(
             "displayed_files": len(top_items),
             "top_n": top_n,
             "title": title,
-            "daily_reset": True
+            "daily_reset": True,
+            # CRITICAL FIX: Return tier counts in search-heatmaps response
+            "hot_tier": hot_tier,
+            "warm_tier": warm_tier,
+            "cold_tier": cold_tier
         }
     except HTTPException:
         raise
