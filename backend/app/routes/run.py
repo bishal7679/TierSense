@@ -56,7 +56,7 @@ def extract_date_from_filename(filename: str) -> str:
     """
     # Pattern for YYYY-MM-DD format
     date_pattern_hyphen = re.compile(r'(\d{4}-\d{2}-\d{2})')
-    # Pattern for YYYYMMDD format  
+    # Pattern for YYYYMMDD format
     date_pattern_compact = re.compile(r'(\d{8})')
     
     # Try YYYY-MM-DD format first
@@ -178,6 +178,8 @@ async def search_heatmaps(
 
         top_items = dict(sorted(access_counts.items(), key=lambda x: x[1], reverse=True)[:top_n])
         heatmap = generate_heatmap(top_items, top_n, title)
+        
+        # CRITICAL FIX: Return tier counts in the summary object that frontend expects
         return {
             "heatmap": heatmap,
             "search_type": search_type,
@@ -186,10 +188,20 @@ async def search_heatmaps(
             "top_n": top_n,
             "title": title,
             "daily_reset": True,
-            # CRITICAL FIX: Return tier counts in search-heatmaps response
-            "hot_tier": hot_tier,
-            "warm_tier": warm_tier,
-            "cold_tier": cold_tier
+            # CRITICAL FIX: Include summary object with tier counts for frontend compatibility
+            "summary": {
+                "total_files": len(access_counts),
+                "hot_tier": hot_tier,
+                "warm_tier": warm_tier,
+                "cold_tier": cold_tier,
+            },
+            "search_info": {
+                "type": search_type,
+                "title": title,
+                "total_files": len(access_counts),
+                "displayed_files": len(top_items),
+                "daily_reset": True
+            }
         }
     except HTTPException:
         raise

@@ -124,31 +124,26 @@ export default function TierSense() {
 
       if (response.ok) {
         const result = await response.json();
-        // CRITICAL FIX: Use timestamped URL to prevent caching issues
         setHeatmapUrl(`${apiUrl}${result.heatmap}?ts=${Date.now()}`);
-        
-        // ENHANCED: Create comprehensive results object
         setResults({
+          ...results,
           heatmap: result.heatmap,
+          // CRITICAL FIX: Use summary from result if available, otherwise create from result data
+          summary: result.summary || {
+            total_files: result.total_files || 0,
+            hot_tier: result.hot_tier || 0,
+            warm_tier: result.warm_tier || 0,
+            cold_tier: result.cold_tier || 0
+          },
           search_info: {
             type: result.search_type,
             title: result.title,
             total_files: result.total_files,
             displayed_files: result.displayed_files,
-            daily_reset: result.daily_reset,
-          },
-          summary: {
-            total_files: result.total_files,
-            hot_tier: 0, // Search doesn't provide tier breakdown
-            warm_tier: 0,
-            cold_tier: 0,
-          },
-          analysis: [], // Search doesn't provide detailed analysis
+            daily_reset: result.daily_reset
+          }
         });
-        
-        setTotalFiles(result.total_files);
-        setApiKeyWarning(""); // Clear any previous errors
-      } else {
+      }  else {
         const errorData = await response.json();
         setApiKeyWarning(errorData.detail || "Search failed");
       }
