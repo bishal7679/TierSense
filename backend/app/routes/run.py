@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import JSONResponse
 from app.core.parser import (
-    parse_logs,
+    # parse_logs,
     parse_logs_for_date,
     parse_logs_with_daily_reset
 )
@@ -12,6 +12,7 @@ from app.core.historical import historical_manager
 from app.config import LOG_DIR, HEATMAP_PATH
 import os
 import sqlite3
+import re
 from datetime import datetime
 import logging
 
@@ -48,6 +49,31 @@ def init_history_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_date ON daily_access_counts(date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON daily_access_counts(file_path)")
 
+def extract_date_from_filename(filename: str) -> str:
+    """
+    CRITICAL FIX: Extract date dynamically from filename instead of hardcoding.
+    Supports multiple date formats: YYYY-MM-DD and YYYYMMDD
+    """
+    # Pattern for YYYY-MM-DD format
+    date_pattern_hyphen = re.compile(r'(\d{4}-\d{2}-\d{2})')
+    # Pattern for YYYYMMDD format  
+    date_pattern_compact = re.compile(r'(\d{8})')
+    
+    # Try YYYY-MM-DD format first
+    match = date_pattern_hyphen.search(filename)
+    if match:
+        return match.group(1)
+    
+    # Try YYYYMMDD format and convert to YYYY-MM-DD
+    match = date_pattern_compact.search(filename)
+    if match:
+        date_str = match.group(1)
+        # Convert YYYYMMDD to YYYY-MM-DD
+        if len(date_str) == 8:
+            return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+    
+    return None
+
 @router.get("/historical-dates")
 async def get_historical_dates():
     """Get list of available dates with daily-reset historical data."""
@@ -60,14 +86,16 @@ async def get_historical_dates():
                 LIMIT 30
             """).fetchall()
         dates = [row[0] for row in rows]
+        
+        # CRITICAL FIX: Dynamic date extraction from log files
         if os.path.isdir(LOG_DIR):
             for fn in os.listdir(LOG_DIR):
                 if fn.startswith("tiersense-processed") and fn.endswith(".ndjson"):
-                    # Extract date from filename patterns
-                    if "2025-07-31" in fn and "2025-07-31" not in dates:
-                        dates.append("2025-07-31")
-                    elif "20250731" in fn and "2025-07-31" not in dates:
-                        dates.append("2025-07-31")
+                    # Extract date dynamically from filename
+                    extracted_date = extract_date_from_filename(fn)
+                    if extracted_date and extracted_date not in dates:
+                        dates.append(extracted_date)
+                        
         return {"available_dates": sorted(set(dates), reverse=True)}
     except Exception as e:
         logger.error(f"Error fetching historical dates: {e}")
