@@ -309,9 +309,9 @@ export default function TierSense() {
                 <div className="flex items-center space-x-2">
                   <span
                     className="w-3 h-3 bg-green-400 rounded-full animate-pulse"
-                    style={{ boxShadow: "0 0 6px 2px rgba(52,211,153,0.7)" }}
+                    style={{ boxShadow: "0 0 6px 2px rgba(50, 211, 98, 0.7)" }}
                   />
-                  <span className="text-green-600 font-medium">Daily Reset Active</span>
+                  <span className="text-green-600 font-medium" >Daily Reset Active</span>
                 </div>
               )}
             </div>
