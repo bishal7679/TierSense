@@ -3,6 +3,7 @@ import os
 import schedule
 import time
 import threading
+import subprocess
 from datetime import datetime
 from app.core.historical import historical_manager
 from app.config import LOG_DIR
@@ -11,28 +12,53 @@ import logging
 logger = logging.getLogger(__name__)
 
 def perform_daily_reset():
-    """Perform daily reset of access counts"""
+    """Perform daily reset of access counts with complete file cleanup and Filebeat restart"""
     try:
         today = datetime.now().strftime("%Y-%m-%d")
         logger.info(f"Performing daily reset for {today}")
         
-        # Clean up old log files (keep only today's)
+        # Step 1: Stop Filebeat to release file handles
+        try:
+            subprocess.run(['pkill', '-f', 'filebeat'], check=False, capture_output=True)
+            time.sleep(2)  # Give Filebeat time to stop
+            logger.info("Stopped Filebeat for daily reset")
+        except Exception as e:
+            logger.warning(f"Failed to stop Filebeat: {e}")
+        
+        # Step 2: Clean up ALL NDJSON files (including today's) to force fresh start
+        removed_files = []
         for filename in os.listdir(LOG_DIR):
             if (filename.endswith(".ndjson") and 
-                "tiersense-processed" in filename and 
-                today not in filename):
+                "tiersense-processed" in filename):
                 old_file_path = os.path.join(LOG_DIR, filename)
-                os.remove(old_file_path)
-                logger.info(f"Removed old log file: {filename}")
+                try:
+                    os.remove(old_file_path)
+                    removed_files.append(filename)
+                    logger.info(f"Removed log file during reset: {filename}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove {filename}: {e}")
         
-        # Clean up old historical data (keep only last 7 days)
+        # Step 3: Clean up old historical data (keep only last 7 days)
         historical_manager.cleanup_old_reset_data(days_to_keep=7)
         
-        # Clean up old heatmap files
+        # Step 4: Clean up old heatmap files
         from app.core.heatmap import cleanup_old_heatmaps
         cleanup_old_heatmaps(keep_count=7)
         
-        logger.info(f"Daily reset completed for {today}")
+        # Step 5: Restart Filebeat to create fresh file for today
+        try:
+            # Use nohup to start Filebeat in background
+            with open('/app/logs/filebeat.log', 'a') as log_file:
+                subprocess.Popen([
+                    'nohup', 'filebeat', '-e', '-c', '/etc/filebeat/filebeat.yml'
+                ], stdout=log_file, stderr=subprocess.STDOUT, 
+                preexec_fn=os.setsid)  # Start new process group
+            time.sleep(3)  # Give Filebeat time to start
+            logger.info("Restarted Filebeat for fresh file creation")
+        except Exception as e:
+            logger.error(f"Failed to restart Filebeat: {e}")
+        
+        logger.info(f"Daily reset completed for {today} - removed {len(removed_files)} files")
         
     except Exception as e:
         logger.error(f"Daily reset failed: {e}")
@@ -58,11 +84,57 @@ def start_background_scheduler():
     scheduler_thread.start()
     logger.info("Daily reset scheduler started in background thread")
 
-# Manual reset function for testing
+# Enhanced manual reset function for testing
 def manual_reset():
-    """Manually trigger a reset (for testing purposes)"""
+    """Manually trigger a reset (for testing purposes) - completely resets access counts"""
     logger.info("Manual reset triggered")
+    
+    # Perform the same complete reset as daily reset
     perform_daily_reset()
+    
+    # Wait a moment for Filebeat to stabilize
+    time.sleep(5)
+    
+    # Verify Filebeat is running
+    try:
+        result = subprocess.run(['pgrep', '-f', 'filebeat'], 
+                              capture_output=True, text=True)
+        if result.returncode == 0:
+            logger.info("Manual reset completed - Filebeat is running")
+        else:
+            logger.warning("Manual reset completed but Filebeat may not be running")
+    except Exception as e:
+        logger.warning(f"Could not verify Filebeat status: {e}")
+
+def get_reset_status():
+    """Get current reset status information"""
+    try:
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        # Check if today's NDJSON file exists
+        ndjson_files = [f for f in os.listdir(LOG_DIR) 
+                       if f.endswith('.ndjson') and 'tiersense-processed' in f]
+        
+        # Check if Filebeat is running
+        filebeat_running = False
+        try:
+            result = subprocess.run(['pgrep', '-f', 'filebeat'], 
+                                  capture_output=True)
+            filebeat_running = result.returncode == 0
+        except:
+            pass
+        
+        return {
+            "daily_reset_active": True,
+            "reset_time": "00:00 UTC",
+            "current_date": today,
+            "ndjson_files": ndjson_files,
+            "filebeat_running": filebeat_running,
+            "data_retention_days": 7
+        }
+    except Exception as e:
+        logger.error(f"Failed to get reset status: {e}")
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     run_daily_reset_scheduler()

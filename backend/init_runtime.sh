@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# init_runtime.sh - FINAL CORRECTED VERSION
+# init_runtime.sh
 
 set -euo pipefail
 log() { echo "[INIT] $*"; }
@@ -23,11 +23,14 @@ else
   log "NFS already mounted at /mnt/nfs"
 fi
 
-# 3. Prepare logs dir
+# 3. Prepare logs dir and clean up previous files
 mkdir -p /app/logs && chmod 777 /app/logs
-log "Prepared /app/logs"
 
-# 4. Write Filebeat config - CORRECTED to use exact filename
+# Clean up all previous NDJSON files to ensure fresh start
+rm -f /app/logs/tiersense-processed*.ndjson
+log "Cleaned up previous NDJSON files"
+
+# 4. Write Filebeat config - CORRECTED
 TODAY=$(date +%Y-%m-%d)
 cat <<EOF > /etc/filebeat/filebeat.yml
 filebeat.inputs:
@@ -43,8 +46,8 @@ filebeat.inputs:
 output.file:
   enabled: true
   path: "/app/logs"
-  filename: "tiersense-processed-${TODAY}" 
-  rotate_every_kb: 1048576 # 1GB to minimize rotation
+  filename: "tiersense-processed-${TODAY}"
+  rotate_every_kb: 1073741824  # 1GB - very large to prevent rotation
   number_of_files: 2
   permissions: 0644
 
@@ -65,7 +68,7 @@ logging.files:
   keepfiles: 3
 EOF
 
-# log "Wrote Filebeat config for ${TODAY}"
+log "Wrote Filebeat config for ${TODAY}"
 
 # 5. Start Filebeat
 pkill -f filebeat || true
@@ -85,7 +88,7 @@ else
   log "Found $RULES_COUNT audit rules"
 fi
 
-# log "Initialized log file for ${TODAY}"
+log "Initialized log file for ${TODAY}"
 
 # 7. Start FastAPI
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --log-level info
