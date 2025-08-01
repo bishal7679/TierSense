@@ -33,15 +33,24 @@ def generate_heatmap(access_counts: dict, top_n: int = 50, title_suffix: str = "
         min_h, max_h = ranges["HOT"]
         min_w, max_w = ranges["WARM"]
         min_c, max_c = ranges["COLD"]
-        if min_h is not None and c >= min_h:
-            colors.append("#DC2626")  # HOT
-        elif ((min_w is None or c >= min_w) and
-              (max_w is None or c < max_w)):
-            colors.append("#F59E0B")  # WARM
-        elif max_c is not None and c < max_c:
-            colors.append("#3B82F6")  # COLD
-        else:
-            colors.append("#10B981")  # fallback
+
+        # HOT
+        if min_h is not None and c >= min_h and (max_h is None or c <= max_h):
+            colors.append("#DC2626")
+            continue
+
+        # WARM
+        if (min_w is None or c >= min_w) and (max_w is None or c <= max_w):
+            colors.append("#F59E0B")
+            continue
+
+        # COLD
+        if max_c is not None and c <= max_c:
+            colors.append("#3B82F6")
+            continue
+
+        # Fallback
+        colors.append("#10B981")
 
     # Dynamic figure size
     height = max(len(paths) * 0.35 + 3, 6)
@@ -70,12 +79,12 @@ def generate_heatmap(access_counts: dict, top_n: int = 50, title_suffix: str = "
     for bar, count in zip(bars, counts):
         if bar.get_width() > max_count * 0.4:
             x = bar.get_width() - max_count * 0.05
-            color = 'white'; ha = 'right'
+            txt_color, ha = 'white', 'right'
         else:
             x = bar.get_width() + max_count * 0.02
-            color = 'black'; ha = 'left'
-        ax.text(x, bar.get_y() + bar.get_height()/2, str(count),
-                va='center', ha=ha, fontsize=8, fontweight='bold', color=color)
+            txt_color, ha = 'black', 'left'
+        ax.text(x, bar.get_y() + bar.get_height() / 2, str(count),
+                va='center', ha=ha, fontsize=8, fontweight='bold', color=txt_color)
 
     # Legend using dynamic ranges
     legend_items = []
@@ -84,7 +93,7 @@ def generate_heatmap(access_counts: dict, top_n: int = 50, title_suffix: str = "
             label = f"HOT (≥{min_v})" if min_v is not None else "HOT"
             color = "#DC2626"
         elif tier == "WARM":
-            label = f"WARM ({min_v or 0}-{(max_v or '')})"
+            label = f"WARM ({min_v or 0}-{max_v or ''})"
             color = "#F59E0B"
         else:  # COLD
             label = f"COLD (<{max_v})" if max_v is not None else "COLD"
@@ -92,7 +101,6 @@ def generate_heatmap(access_counts: dict, top_n: int = 50, title_suffix: str = "
         legend_items.append(mpatches.Patch(color=color, label=label))
 
     ax.legend(handles=legend_items, loc='lower right', fontsize=8, framealpha=0.95)
-
     ax.grid(axis='x', alpha=0.3, linestyle='--', linewidth=0.5)
     ax.set_axisbelow(True)
 
@@ -119,10 +127,18 @@ def cleanup_old_heatmaps(keep_count: int = 10):
         dir_ = os.path.dirname(HEATMAP_PATH)
         if not os.path.exists(dir_):
             return
-        files = [f for f in os.listdir(dir_) if f.startswith("access_heatmap_") and f.endswith(".png")]
+
+        files = [
+            f for f in os.listdir(dir_)
+            if f.startswith("access_heatmap_") and f.endswith(".png")
+        ]
         if len(files) <= keep_count:
             return
-        files.sort(key=lambda f: os.path.getmtime(os.path.join(dir_, f)), reverse=True)
+
+        files.sort(
+            key=lambda f: os.path.getmtime(os.path.join(dir_, f)),
+            reverse=True
+        )
         for old in files[keep_count:]:
             try:
                 os.remove(os.path.join(dir_, old))

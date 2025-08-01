@@ -54,8 +54,10 @@ def load_tier_ranges():
     except (FileNotFoundError, json.JSONDecodeError):
         data = {}
 
-    return data.get("tier_ranges", {
+    # Ensure default structure if missing
+    defaults = {
         "HOT": [None, None],
         "WARM": [None, None],
         "COLD": [None, None]
-    })
+    }
+    return data.get("tier_ranges", defaults)
