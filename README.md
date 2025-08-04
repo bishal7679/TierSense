@@ -126,6 +126,7 @@ docker compose up -d
 
 ## 🌡 Heatmap Sample Output
 <img width="500" height="200" alt="Screenshot 2025-07-14 112214" src="https://github.com/user-attachments/assets/c7d76557-3cb7-4787-aed0-b05ea28314c2" />
+
 `These visuals give you an intuitive idea of how your data is being used—and how it should be stored.`
 
 View the heatmap result:
