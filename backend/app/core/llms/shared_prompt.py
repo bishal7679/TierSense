@@ -1,10 +1,9 @@
-# backend/app/core/llms/shared_prompt.py
-
 from app.config import load_tier_ranges
 
 def build_prompt(access_counts: dict) -> str:
     """
-    Build a prompt for LLM classification using dynamic tier thresholds.
+    Build an LLM prompt that precisely describes each tier’s inclusive/exclusive bounds,
+    using the same wording and numeric intervals as the code and UI.
     """
     ranges = load_tier_ranges()
     hot_min, hot_max = ranges["HOT"]
@@ -13,38 +12,42 @@ def build_prompt(access_counts: dict) -> str:
 
     prompt = (
         "You are a storage tiering engine.\n"
-        "Your job is to classify file paths into one of the following storage tiers based strictly on access frequency:\n"
+        "Classify each file into one of three tiers based strictly on access frequency:\n"
     )
 
-    # Describe HOT
+    # HOT
     if hot_min is not None and hot_max is not None:
-        prompt += f"- HOT: Frequently accessed (access_counts ≥ {hot_min} and < {hot_max + 1})\n"
+        prompt += f"- HOT: frequently accessed (access_counts ≥ {hot_min} and < {hot_max})\n"
     elif hot_min is not None:
-        prompt += f"- HOT: Frequently accessed (access_counts ≥ {hot_min})\n"
+        prompt += f"- HOT: frequently accessed (access_counts ≥ {hot_min})\n"
     else:
-        prompt += "- HOT: Frequently accessed (no lower bound)\n"
+        prompt += "- HOT: frequently accessed (no lower bound)\n"
 
-    # Describe WARM
-    wm_lo = warm_min or 0
-    wm_hi = warm_max or "∞"
-    prompt += f"- WARM: Occasionally accessed ({wm_lo} ≤ access_counts ≤ {warm_max})\n"
-
-    # Describe COLD
-    if cold_max is not None:
-        prompt += f"- COLD: Rarely accessed (access_counts ≤ {cold_max})\n"
+    # WARM
+    if warm_min is not None and warm_max is not None:
+        prompt += f"- WARM: occasionally accessed (access_counts ≥ {warm_min} and < {warm_max})\n"
+    elif warm_min is not None:
+        prompt += f"- WARM: occasionally accessed (access_counts ≥ {warm_min})\n"
+    elif warm_max is not None:
+        prompt += f"- WARM: occasionally accessed (access_counts < {warm_max})\n"
     else:
-        prompt += "- COLD: Rarely accessed (no upper bound)\n"
+        prompt += "- WARM: occasionally accessed (no bounds)\n"
+
+    # COLD
+    if cold_min is not None and cold_max is not None:
+        prompt += f"- COLD: rarely accessed (access_counts ≥ {cold_min} and < {cold_max})\n"
+    elif cold_max is not None:
+        prompt += f"- COLD: rarely accessed (access_counts < {cold_max})\n"
+    else:
+        prompt += "- COLD: rarely accessed (no upper bound)\n"
 
     prompt += (
-        "\nOutput Format Requirements:\n"
-        "- Return only a valid JSON object.\n"
-        "- Do NOT include explanations, headers, comments, markdown, or natural language.\n"
-        "- JSON keys must be the file paths. JSON values must be one of: HOT, WARM, or COLD (uppercase).\n"
-        "- Invalid or incomplete output will be rejected.\n\n"
+        "\nOutput format requirements:\n"
+        "- Return only a JSON object mapping file paths to HOT, WARM, or COLD.\n"
+        "- Do not include any explanatory text, markdown, or extra fields.\n\n"
         "=== Access Frequency Data (path: count) ===\n"
     )
 
-    # Provide the raw access counts
     for path, count in sorted(access_counts.items(), key=lambda x: -x[1]):
         prompt += f"{path}: {count}\n"
 

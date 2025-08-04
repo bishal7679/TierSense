@@ -1,5 +1,5 @@
 # backend/app/routes/run.py
- 
+
 from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import JSONResponse
 from app.core.parser import parse_logs_for_date, parse_logs_with_daily_reset
@@ -13,12 +13,12 @@ import sqlite3
 import re
 from datetime import datetime
 import logging
- 
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
- 
+
 HISTORY_DB = os.path.join(LOG_DIR, "tiersense_history.db")
- 
+
 def init_history_db():
     """Initialize SQLite database for daily reset historical data tables."""
     os.makedirs(os.path.dirname(HISTORY_DB), exist_ok=True)
@@ -46,7 +46,7 @@ def init_history_db():
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_date ON daily_access_counts(date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_file_path ON daily_access_counts(file_path)")
- 
+
 def extract_date_from_filename(filename: str) -> str:
     """Extract date dynamically from filename (supports YYYY-MM-DD and YYYYMMDD)."""
     date_pattern_hyphen = re.compile(r'(\d{4}-\d{2}-\d{2})')
@@ -59,27 +59,37 @@ def extract_date_from_filename(filename: str) -> str:
         ds = match.group(1)
         return f"{ds[:4]}-{ds[4:6]}-{ds[6:8]}"
     return None
- 
+
 def calculate_tier_counts(counts):
-    """Calculate HOT/WARM/COLD counts using dynamic ranges."""
+    """Calculate HOT/WARM/COLD counts using dynamic tier ranges from settings."""
     ranges = load_tier_ranges()
-    hot_min, hot_max = ranges["HOT"]
-    warm_min, warm_max = ranges["WARM"]
-    cold_min, cold_max = ranges["COLD"]
- 
+    hot_min, hot_max = ranges.get("HOT", [None, None])
+    warm_min, warm_max = ranges.get("WARM", [None, None])
+    cold_min, cold_max = ranges.get("COLD", [None, None])
+
     hot = warm = cold = 0
     for c in counts:
-        if (hot_min is None or c >= hot_min) and (hot_max is None or c <= hot_max):
-            hot += 1
-        elif (warm_min is None or c >= warm_min) and (warm_max is None or c <= warm_max):
+        # Check HOT tier first
+        if hot_min is not None and c >= hot_min:
+            if hot_max is None or c <= hot_max:
+                hot += 1
+                continue
+        
+        # Check WARM tier
+        if ((warm_min is None or c >= warm_min) and 
+            (warm_max is None or c <= warm_max)):
             warm += 1
-        elif (cold_max is None or c <= cold_max):
+            continue
+            
+        # Check COLD tier or default
+        if cold_max is not None and c <= cold_max:
             cold += 1
         else:
-            # values outside defined tiers count as COLD by default
+            # Files outside defined ranges default to COLD
             cold += 1
+            
     return hot, warm, cold
- 
+
 @router.get("/historical-dates")
 async def get_historical_dates():
     """Get list of available dates with daily-reset historical data."""
@@ -92,6 +102,8 @@ async def get_historical_dates():
                 LIMIT 30
             """).fetchall()
         dates = [r[0] for r in rows]
+        
+        # Add dates from log files
         if os.path.isdir(LOG_DIR):
             for fn in os.listdir(LOG_DIR):
                 if fn.startswith("tiersense-processed") and fn.endswith(".ndjson"):
@@ -102,7 +114,7 @@ async def get_historical_dates():
     except Exception as e:
         logger.error(f"Error fetching historical dates: {e}")
         return {"available_dates": []}
- 
+
 @router.post("/search-heatmaps")
 async def search_heatmaps(
     search_type: str = Form(...),
@@ -113,20 +125,23 @@ async def search_heatmaps(
     top_n: int = Form(50),
     directory: str = Form(None)
 ):
-    """Advanced heatmap search with daily-reset support."""
+    """Advanced heatmap search with daily-reset support and enriched metadata."""
     raw = directory.strip() if directory else LOG_DIR
     target = raw.replace("/host-root", "", 1) if raw.startswith("/host-root") else raw
     target = os.path.realpath(target)
- 
+
     try:
-        # Purge old heatmaps
+        # Purge old heatmaps before generating new ones
         hm_dir = os.path.dirname(HEATMAP_PATH)
         if os.path.isdir(hm_dir):
             for f in os.listdir(hm_dir):
                 if f.startswith("access_heatmap_") and f.endswith(".png"):
-                    try: os.remove(os.path.join(hm_dir, f))
-                    except: pass
- 
+                    try: 
+                        os.remove(os.path.join(hm_dir, f))
+                    except: 
+                        pass
+
+        # Execute search based on type
         if search_type == "current":
             access_counts = parse_logs_with_daily_reset(LOG_DIR, prefix=target, debug=False)
             title = f"Today ({datetime.now():%Y-%m-%d}) - Daily Reset"
@@ -159,20 +174,25 @@ async def search_heatmaps(
         elif search_type == "pattern":
             access_counts = parse_logs_with_daily_reset(LOG_DIR, prefix=target, debug=False)
             if file_pattern:
-                access_counts = {p: c for p, c in access_counts.items() if file_pattern.lower() in p.lower()}
+                access_counts = {
+                    p: c for p, c in access_counts.items() 
+                    if file_pattern.lower() in p.lower()
+                }
             title = f"Pattern: {file_pattern} (Daily Reset)"
         else:
             raise HTTPException(400, "Invalid search type or missing parameters")
- 
+
         if not access_counts:
             raise HTTPException(404, "No data found for the specified search criteria")
- 
+
+        # Calculate statistics with dynamic tier ranges
         total_files = len(access_counts)
         hot_tier, warm_tier, cold_tier = calculate_tier_counts(access_counts.values())
- 
+
+        # Generate top items and heatmap
         top_items = dict(sorted(access_counts.items(), key=lambda x: x[1], reverse=True)[:top_n])
         heatmap_url = generate_heatmap(top_items, top_n, title)
- 
+
         return {
             "heatmap": heatmap_url,
             "search_type": search_type,
@@ -181,8 +201,8 @@ async def search_heatmaps(
             "top_n": top_n,
             "title": title,
             "daily_reset": True,
-            "access_counts": access_counts,  # ← Added full access counts map
-            "top_items": top_items,          # ← Added top N items
+            "access_counts": access_counts,  # Full access counts map
+            "top_items": top_items,          # Top N items for display
             "summary": {
                 "total_files": total_files,
                 "hot_tier": hot_tier,
@@ -197,13 +217,13 @@ async def search_heatmaps(
                 "daily_reset": True
             }
         }
- 
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Search heatmaps failed: {e}")
         raise HTTPException(500, f"Search heatmaps failed: {e}")
- 
+
 @router.post("/run-tiering")
 async def run_tiering(
     llm: str = Form(...),
@@ -211,101 +231,116 @@ async def run_tiering(
     directory: str = Form(None),
     top_n: int = Form(50)
 ):
-    """Run tiering analysis with daily-reset fresh counts."""
+    """Run tiering analysis with enriched suggestions and metadata."""
     raw = directory.strip() if directory else LOG_DIR
     target = raw.replace("/host-root", "", 1) if raw.startswith("/host-root") else raw
     target = os.path.realpath(target)
+    
     if not os.path.isdir(raw):
         raise HTTPException(400, f"Directory not found: {raw}")
- 
-    # Purge old heatmaps
+
+    # Clean up old heatmaps
     hm_dir = os.path.dirname(HEATMAP_PATH)
     if os.path.isdir(hm_dir):
         for f in os.listdir(hm_dir):
             if f.startswith("access_heatmap_") and f.endswith(".png"):
-                try: os.remove(os.path.join(hm_dir, f))
-                except: pass
- 
+                try: 
+                    os.remove(os.path.join(hm_dir, f))
+                    logger.info(f"Removed old heatmap: {f}")
+                except: 
+                    pass
+
     today = datetime.now().strftime("%Y-%m-%d")
     access_counts = parse_logs_with_daily_reset(LOG_DIR, prefix=target, debug=False)
+    
     if not access_counts:
         raise HTTPException(400, f"No file access events found for {today}")
- 
+
     # Generate heatmap
-    heatmap_url = generate_heatmap(access_counts, top_n=top_n, title_suffix=f"Today ({today}) - Daily Reset")
- 
-    # Persist historical data
+    heatmap_url = generate_heatmap(
+        access_counts, 
+        top_n=top_n, 
+        title_suffix=f"Today ({today}) - Daily Reset"
+    )
+
+    # Save historical data and cleanup
     historical_manager.save_daily_reset_data(today, access_counts)
     historical_manager.cleanup_old_reset_data(days_to_keep=7)
     cleanup_old_heatmaps(keep_count=1)
- 
-    # LLM tiering suggestions
+
+    # Generate LLM tiering suggestions with enriched metadata
     suggestions = generate_tiering_suggestions(llm, access_counts, api_key)
- 
-    # Calculate dynamic summary
+
+    # Calculate tier summary using dynamic ranges
     total_files = len(access_counts)
     hot_tier, warm_tier, cold_tier = calculate_tier_counts(access_counts.values())
- 
-    # Post-process analysis paths
-    def strip_pref(p: str) -> str:
+
+    # Process analysis paths and preserve enriched data
+    def strip_host_prefix(p: str) -> str:
         return p.replace("/host-root", "", 1) if p.startswith("/host-root") else p
- 
+
     analysis = []
-    for ent in suggestions.get("analysis", []):
-        path = strip_pref(ent["path"])
+    for item in suggestions.get("analysis", []):
+        path = strip_host_prefix(item["path"])
+        # Skip directories and invalid paths
         if path == target or not os.path.exists(path) or os.path.isdir(path):
             continue
-        ent["path"] = path
-        analysis.append(ent)
- 
-    summary = {
-        "total_files": total_files,
-        "hot_tier": hot_tier,
-        "warm_tier": warm_tier,
-        "cold_tier": cold_tier
-    }
- 
-    # Create top items for JSON output
+        
+        # Update path and preserve all enriched fields (suggestion, metadata)
+        item["path"] = path
+        analysis.append(item)
+
+    # Create top items for response
     top_items = dict(sorted(access_counts.items(), key=lambda x: x[1], reverse=True)[:top_n])
- 
+
     return JSONResponse({
         "heatmap": heatmap_url,
         "date": today,
-        "access_counts": access_counts,      # ← Added full access counts map
-        "top_items": top_items,              # ← Added top N items
-        "analysis": analysis,
-        "summary": summary,
+        "access_counts": access_counts,      # Full access counts map
+        "top_items": top_items,              # Top N items
+        "analysis": analysis,                # Now includes suggestion & metadata
+        "summary": {
+            "total_files": total_files,
+            "hot_tier": hot_tier,
+            "warm_tier": warm_tier,
+            "cold_tier": cold_tier
+        },
         "top_n_displayed": min(top_n, total_files),
         "daily_reset": True,
         "reset_time": "00:00",
-        "message": f"Daily reset completed for {today}"
+        "message": f"Daily reset completed for {today} with enriched suggestions"
     })
- 
+
 @router.post("/manual-reset")
 async def trigger_manual_reset():
     """Manually trigger daily reset for testing."""
     try:
-        logger.info("Manual reset triggered")
-        # Purge heatmaps
+        logger.info("Manual reset triggered via API")
+        
+        # Clean up heatmaps
         hm_dir = os.path.dirname(HEATMAP_PATH)
         if os.path.isdir(hm_dir):
             for f in os.listdir(hm_dir):
                 if f.startswith("access_heatmap_") and f.endswith(".png"):
-                    try: os.remove(os.path.join(hm_dir, f))
-                    except: pass
+                    try: 
+                        os.remove(os.path.join(hm_dir, f))
+                        logger.info(f"Removed heatmap: {f}")
+                    except: 
+                        pass
+        
         manual_reset()
         return {
             "status": "success",
-            "message": "Manual daily reset completed",
+            "message": "Manual daily reset completed successfully",
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
     except Exception as e:
         logger.error(f"Manual reset failed: {e}")
         raise HTTPException(500, f"Manual reset failed: {e}")
- 
+
 @router.get("/reset-status")
 async def get_reset_status():
-    """Get current daily-reset status and info."""
+    """Get current daily-reset status and information."""
     try:
         today = datetime.now().strftime("%Y-%m-%d")
         data = historical_manager.get_daily_reset_data(today)
@@ -316,7 +351,7 @@ async def get_reset_status():
             "has_todays_data": data is not None,
             "data_retention_days": 7,
             "available_dates": historical_manager.get_available_dates(limit=7),
-            "description": "Access counts reset daily at midnight"
+            "description": "Access counts reset daily at midnight with dynamic tier suggestions"
         }
     except Exception as e:
         logger.error(f"Reset status failed: {e}")

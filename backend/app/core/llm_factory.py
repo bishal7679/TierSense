@@ -1,7 +1,9 @@
 import os
 import json
 import re
-from typing import Dict, Any
+from datetime import datetime
+from typing import Dict, Any, List
+
 from app.core.llms import gemini, gpt, claude, llama, deepseek
 
 LLM_DISPATCH = {
@@ -15,11 +17,17 @@ LLM_DISPATCH = {
     "deepseek": deepseek.generate,
 }
 
+
 def generate_tiering_suggestions(
     llm_type: str,
     access_counts: Dict[str, int],
     api_key: str = None
 ) -> Dict[str, Any]:
+    """
+    1. Call the selected LLM to classify files into tiers.
+    2. Clean and parse the JSON response.
+    3. Enrich each file entry with dynamic suggestions and metadata.
+    """
     llm = llm_type.lower()
     if llm not in LLM_DISPATCH:
         raise ValueError(f"Unsupported LLM type: {llm}")
@@ -29,25 +37,23 @@ def generate_tiering_suggestions(
     print(f"[+] Invoking LLM: {llm}")
     print(f"[DEBUG] Raw LLM output:\n{raw}")
 
-    # 2. Strip markdown code fences (``````json)
-    # 2. Strip markdown code fences (```json ... ```)
+    # 2. Strip markdown fences
     cleaned = raw
-    cleaned = re.sub(r'^\s*```(?:json)?\s*', '', cleaned, flags=re.IGNORECASE | re.MULTILINE)
+    cleaned =  re.sub(r'^\s*```(?:json)?\s*', '', cleaned, flags=re.IGNORECASE | re.MULTILINE)
     cleaned = re.sub(r'\s*```$', '', cleaned, flags=re.MULTILINE)
 
+    # 3. Trim leading non-JSON text
+    idx = cleaned.find('{')
+    if idx > 0:
+        cleaned = cleaned[idx:]
 
-    # 3. Remove any leading non-JSON text (e.g., stray "json ")
-    first_brace = cleaned.find('{')
-    if first_brace > 0:
-        cleaned = cleaned[first_brace:]
+    # 4. Balance braces
+    open_b = cleaned.count('{')
+    close_b = cleaned.count('}')
+    if close_b < open_b:
+        cleaned += '}' * (open_b - close_b)
 
-    # 4. Balance braces if truncated
-    open_braces = cleaned.count('{')
-    close_braces = cleaned.count('}')
-    if close_braces < open_braces:
-        cleaned += '}' * (open_braces - close_braces)
-
-    # 5. Extract the first complete JSON object (non-greedy)
+    # 5. Extract first JSON object
     match = re.search(r'(\{.*?\})', cleaned, flags=re.DOTALL)
     if match:
         cleaned = match.group(1)
@@ -58,32 +64,93 @@ def generate_tiering_suggestions(
     except json.JSONDecodeError as e:
         snippet = cleaned[:200].replace('\n', ' ')
         print(f"[!] JSON parse error ({e}): {snippet!r}")
-        raise ValueError(f"LLM returned invalid JSON format: {e}")
-
+        raise ValueError(f"LLM returned invalid JSON: {e}")
     if not isinstance(parsed, dict):
         raise ValueError(f"Expected JSON object, got {type(parsed).__name__}")
 
-    # 7. Build summary and analysis
-    norm = {os.path.normpath(p): cnt for p, cnt in access_counts.items()}
+    # 7. Normalize and build analysis entries
+    normalized = {os.path.normpath(p): cnt for p, cnt in access_counts.items()}
     summary = {"total_files": 0, "hot_tier": 0, "warm_tier": 0, "cold_tier": 0}
-    analysis = []
+    raw_analysis: List[Dict[str, Any]] = []
 
     for raw_path, raw_tier in parsed.items():
         path = os.path.normpath(raw_path if raw_path.startswith('/') else f"/{raw_path}")
         tier = raw_tier.strip().upper()
         if tier not in ("HOT", "WARM", "COLD"):
             raise ValueError(f"Invalid tier '{raw_tier}' for path '{path}'")
-        freq = norm.get(path, "unknown")
+        freq = normalized.get(path, 0)
         summary["total_files"] += 1
         summary[f"{tier.lower()}_tier"] += 1
-        analysis.append({
+        raw_analysis.append({
             "path": path,
             "tier": tier,
-            "score": 0.0,
-            "access_frequency": freq
+            "access_frequency": freq,
         })
 
-    # 8. Sort by descending access count
-    analysis.sort(key=lambda x: norm.get(x["path"], 0), reverse=True)
+    # 8. Sort by frequency descending
+    raw_analysis.sort(key=lambda x: x["access_frequency"], reverse=True)
 
-    return {"summary": summary, "analysis": analysis}
+    # 9. Enrich each entry with suggestion & metadata
+    enriched = _attach_suggestions_and_metadata(raw_analysis, normalized)
+
+    return {"summary": summary, "analysis": enriched}
+
+
+def _attach_suggestions_and_metadata(
+    analysis: List[Dict[str, Any]],
+    access_counts: Dict[str, int]
+) -> List[Dict[str, Any]]:
+    """For each file, add a context-aware suggestion and filesystem metadata."""
+    return [
+        {
+            **item,
+            "suggestion": _generate_suggestion(item, access_counts),
+            "metadata": _get_file_metadata(item["path"]),
+        }
+        for item in analysis
+    ]
+
+
+def _generate_suggestion(
+    item: Dict[str, Any],
+    all_counts: Dict[str, int]
+) -> str:
+    """Return a tailored recommendation based on tier, frequency, and file context."""
+    tier = item["tier"]
+    freq = item["access_frequency"]
+    sorted_vals = sorted(all_counts.values(), reverse=True)
+    percentile = sorted_vals.index(freq) / max(1, len(sorted_vals)) * 100
+
+    ext = os.path.splitext(item["path"])[1].lower()
+    name = os.path.basename(item["path"])
+
+    if tier == "HOT":
+        if freq >= 200:
+            return (
+                f"🔥 Very high demand ({freq} accesses, top {percentile:.0f}%). "
+                "Use SSD caching or CDN distribution for optimum performance."
+            )
+        if ext in (".db", ".sql"):
+            return "💾 High-activity database file—consider read replicas & indexing."
+        return "⚡ Keep on premium storage; monitor for caching opportunities."
+    if tier == "WARM":
+        if ext in (".log", ".txt"):
+            return "📝 Active log—enable rotation and compress older entries."
+        return "📊 Standard cloud tier is cost-effective for this access pattern."
+    # COLD
+    if freq < 10:
+        return "❄️ Rarely accessed—archive to deep storage for maximum savings."
+    return "💤 Low usage—apply automated lifecycle rules to archive after 30 days."
+
+
+def _get_file_metadata(path: str) -> Dict[str, Any]:
+    """Retrieve file size and last modification date; best-effort."""
+    try:
+        st = os.stat(path)
+        return {
+            "size_mb": round(st.st_size / (1024**2), 2),
+            "modified": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d"),
+            "type": os.path.splitext(path)[1] or "unknown"
+        }
+    except Exception:
+        return {"size_mb": None, "modified": None, "type": None}
