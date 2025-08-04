@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Download,
   Settings,
@@ -17,6 +17,9 @@ import {
   Shield,
   Building2,
   TrendingUp,
+  ChevronLeft,
+  ChevronRight,
+  GripVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +43,12 @@ import {
 import { llmOptions } from "@/src/config/llmOptions";
 
 export default function TierSense() {
+  // Sidebar state
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+
   // Core state
   const [selectedLLM, setSelectedLLM] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -73,6 +82,45 @@ export default function TierSense() {
   const [isSearching, setIsSearching] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const minSidebarWidth = 280;
+  const maxSidebarWidth = 600;
+
+  // Sidebar resize functionality
+  const startResize = (e: React.MouseEvent) => {
+    setIsResizing(true);
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const newWidth = e.clientX;
+      if (newWidth >= minSidebarWidth && newWidth <= maxSidebarWidth) {
+        setSidebarWidth(newWidth);
+        setIsCollapsed(false);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  // Toggle collapse/expand
+  const toggleSidebar = () => {
+    setIsCollapsed(!isCollapsed);
+  };
 
   // Load API key and dates on mount
   useEffect(() => {
@@ -314,6 +362,8 @@ export default function TierSense() {
     setApiKeyWarning("");
   };
 
+  const effectiveSidebarWidth = isCollapsed ? 60 : sidebarWidth;
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Fixed Header */}
@@ -468,93 +518,148 @@ export default function TierSense() {
 
       {/* Main Layout */}
       <div className="flex pt-20">
-        {/* Left Sidebar - Analysis Configuration */}
-        <aside className="fixed left-0 top-20 w-80 h-screen bg-white border-r border-gray-200 overflow-y-auto">
-          <div className="p-6">
-            <div className="mb-6">
-              <div className="flex items-center space-x-2 mb-4">
-                <Zap className="h-5 w-5 text-blue-600" />
-                <h2 className="text-lg font-semibold text-gray-900">Analysis Setup</h2>
-              </div>
-              <div className="h-1 w-full bg-blue-600 rounded-full"></div>
-            </div>
-
-            <div className="space-y-6">
-              <div>
-                <Label htmlFor="llm-select" className="text-sm font-medium text-gray-700 mb-2 block">
-                  AI Model Provider
-                </Label>
-                <Select value={selectedLLM} onValueChange={setSelectedLLM}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose AI Model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {llmOptions.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                  Target Directory
-                </Label>
-                <Input
-                  type="text"
-                  placeholder="/host-root/mnt/data"
-                  value={selectedDirectory}
-                  onChange={(e) => setSelectedDirectory(e.target.value)}
-                />
-                <p className="text-xs text-gray-500 mt-2">
-                  Use /host-root prefix for local paths
-                </p>
-              </div>
-
-              <Button
-                onClick={handleRunAnalysis}
-                disabled={!selectedLLM || isAnalyzing || !apiKey}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-              >
-                {isAnalyzing ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4 mr-2" />
-                    Run Analysis
-                  </>
-                )}
-              </Button>
-              {apiKeyWarning && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-xs text-red-600">{apiKeyWarning}</p>
-                </div>
+        {/* Resizable Left Sidebar */}
+        <aside 
+          ref={sidebarRef}
+          className={`fixed left-0 top-20 h-screen bg-white border-r border-gray-200 overflow-hidden transition-all duration-200 ${
+            isResizing ? 'select-none' : ''
+          }`}
+          style={{ width: `${effectiveSidebarWidth}px` }}
+        >
+          {/* Sidebar Content */}
+          <div className="relative h-full">
+            {/* Collapse/Expand Button */}
+            <Button
+              onClick={toggleSidebar}
+              variant="ghost"
+              size="sm"
+              className="absolute top-4 right-2 z-10 h-8 w-8 p-0 hover:bg-gray-100"
+            >
+              {isCollapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronLeft className="h-4 w-4" />
               )}
+            </Button>
 
-              {/* Enterprise Features */}
-              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h3 className="text-sm font-semibold text-blue-900 mb-2 flex items-center space-x-2">
-                  <TrendingUp className="h-4 w-4" />
-                  <span>Enterprise Features</span>
-                </h3>
-                <ul className="text-xs text-blue-700 space-y-1">
-                  <li>• Real-time file access monitoring</li>
-                  <li>• AI-powered tier recommendations</li>
-                  <li>• Historical trend analysis</li>
-                  <li>• Cost optimization insights</li>
-                </ul>
+            {/* Sidebar Main Content */}
+            <div className={`h-full overflow-y-auto transition-opacity duration-200 ${
+              isCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'
+            }`}>
+              <div className="p-6">
+                <div className="mb-6">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Zap className="h-5 w-5 text-blue-600" />
+                    <h2 className="text-lg font-semibold text-gray-900">Analysis Setup</h2>
+                  </div>
+                  <div className="h-1 w-full bg-blue-600 rounded-full"></div>
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <Label htmlFor="llm-select" className="text-sm font-medium text-gray-700 mb-2 block">
+                      AI Model Provider
+                    </Label>
+                    <Select value={selectedLLM} onValueChange={setSelectedLLM}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose AI Model" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {llmOptions.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Target Directory
+                    </Label>
+                    <Input
+                      type="text"
+                      placeholder="/host-root/mnt/data"
+                      value={selectedDirectory}
+                      onChange={(e) => setSelectedDirectory(e.target.value)}
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                      Use /host-root prefix for local paths
+                    </p>
+                  </div>
+
+                  <Button
+                    onClick={handleRunAnalysis}
+                    disabled={!selectedLLM || isAnalyzing || !apiKey}
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4 mr-2" />
+                        Run Analysis
+                      </>
+                    )}
+                  </Button>
+                  {apiKeyWarning && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <p className="text-xs text-red-600">{apiKeyWarning}</p>
+                    </div>
+                  )}
+
+                  {/* Enterprise Features */}
+                  <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h3 className="text-sm font-semibold text-blue-900 mb-2 flex items-center space-x-2">
+                      <TrendingUp className="h-4 w-4" />
+                      <span>Enterprise Features</span>
+                    </h3>
+                    <ul className="text-xs text-blue-700 space-y-1">
+                      <li>• Real-time file access monitoring</li>
+                      <li>• AI-powered tier recommendations</li>
+                      <li>• Historical trend analysis</li>
+                      <li>• Cost optimization insights</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
             </div>
+
+            {/* Collapsed State Icon */}
+            {isCollapsed && (
+              <div className="flex flex-col items-center justify-center h-full space-y-4">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Zap className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="writing-mode-vertical text-sm font-medium text-gray-600 transform rotate-180">
+                  Analysis
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Resize Handle */}
+          {!isCollapsed && (
+            <div
+              className="absolute top-0 right-0 w-1 h-full bg-gray-300 opacity-0 hover:opacity-100 cursor-col-resize transition-opacity duration-200 group"
+              onMouseDown={startResize}
+            >
+              <div className="absolute top-1/2 right-0 transform translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <GripVertical className="h-4 w-4 text-gray-500" />
+              </div>
+            </div>
+          )}
         </aside>
 
         {/* Main Content Area */}
-        <main className="ml-80 flex-1 p-6">
+        <main 
+          className="flex-1 p-6 transition-all duration-200"
+          style={{ marginLeft: `${effectiveSidebarWidth}px` }}
+        >
           {results ? (
             <div className="space-y-6">
               {/* Daily Reset Banner */}
