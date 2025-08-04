@@ -61,9 +61,9 @@ export default function TierSense() {
 
   // Tier ranges (HOT, WARM, COLD)
   const [tierRanges, setTierRanges] = useState<{ [key: string]: [number | null, number | null] }>({
-    HOT: [100, null],
+    HOT: [100, 999],
     WARM: [20, 99],
-    COLD: [null, 19],
+    COLD: [0, 19],
   });
   const [tierError, setTierError] = useState("");
 

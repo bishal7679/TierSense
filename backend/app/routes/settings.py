@@ -43,9 +43,9 @@ def get_settings():
         "tier_ranges": data.get(
             "tier_ranges",
             {
-                "HOT": [100, None],
+                "HOT": [100, 999],
                 "WARM": [20, 99],
-                "COLD": [None, 19],
+                "COLD": [0, 19],
             },
         ),
     }
@@ -60,9 +60,9 @@ async def save_user_settings(request: Request):
     tier_ranges = body.get(
         "tier_ranges",
         {
-            "HOT": [100, None],
+            "HOT": [100, 999],
             "WARM": [20, 99],
-            "COLD": [None, 19],
+            "COLD": [0, 19],
         },
     )
 
