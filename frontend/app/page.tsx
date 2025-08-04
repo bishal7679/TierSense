@@ -392,9 +392,9 @@ export default function TierSense() {
                 onClick={handleManualReset}
                 variant="outline"
                 size="sm"
-                className="hover:bg-gray-50"
+                className="hover:bg-red-50 border-red-200 text-red-700 hover:text-red-800 hover:border-red-300"
               >
-                <RefreshCw className="h-4 w-4 mr-2" />
+                <RefreshCw className="h-4 w-4 mr-2 text-red-600" />
                 Reset
               </Button>
               <Dialog open={showSettings} onOpenChange={setShowSettings}>
@@ -596,7 +596,7 @@ export default function TierSense() {
                   >
                     {isAnalyzing ? (
                       <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
                         Analyzing...
                       </>
                     ) : (
@@ -828,7 +828,14 @@ export default function TierSense() {
                           className="h-8 bg-blue-600 hover:bg-blue-700"
                         >
                           <Search className="h-3 w-3 mr-1" />
-                          {isSearching ? "Searching..." : "Apply"}
+                          {isSearching ? (
+                            <>
+                              <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent mr-1"></div>
+                              Searching...
+                            </>
+                          ) : (
+                            "Apply"
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -922,21 +929,16 @@ export default function TierSense() {
         </main>
       </div>
 
-      {/* Modern Loading Overlay */}
+      {/* Simple Loading Overlay */}
       {(isAnalyzing || isSearching) && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-20 backdrop-blur-sm z-50">
-          <div className="flex flex-col items-center p-8 bg-white rounded-xl shadow-lg max-w-sm mx-4">
-            <div className="relative">
-              <div className="w-16 h-16 border-4 border-gray-200 rounded-full animate-spin border-t-blue-600"></div>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-8 h-8 bg-blue-600 rounded-full animate-pulse"></div>
-              </div>
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
+          <div className="bg-white rounded-lg shadow-lg p-8 flex flex-col items-center space-y-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent"></div>
+            <div className="text-lg font-medium text-gray-800">
+              {isAnalyzing ? "Analyzing..." : "Searching..."}
             </div>
-            <div className="text-lg font-semibold text-gray-800 mt-4 text-center">
-              {isAnalyzing ? "Processing Analysis" : "Searching Data"}
-            </div>
-            <div className="text-sm text-gray-500 text-center mt-2">
-              {isAnalyzing ? "AI is analyzing your storage patterns..." : "Searching through data and generating visualizations..."}
+            <div className="text-sm text-gray-500">
+              {isAnalyzing ? "Processing your data" : "Finding results"}
             </div>
           </div>
         </div>
