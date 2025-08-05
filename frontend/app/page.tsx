@@ -726,15 +726,7 @@ export default function TierSense() {
                       </li>
                       <li className="text-sm text-blue-800 flex items-start space-x-3 leading-relaxed">
                         <div className="w-2 h-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full mt-2 shadow-sm flex-shrink-0"></div>
-                        <span className="font-semibold">Automated audit rule configuration</span>
-                      </li>
-                      <li className="text-sm text-blue-800 flex items-start space-x-3 leading-relaxed">
-                        <div className="w-2 h-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full mt-2 shadow-sm flex-shrink-0"></div>
                         <span className="font-semibold">Real-time file access monitoring</span>
-                      </li>
-                      <li className="text-sm text-blue-800 flex items-start space-x-3 leading-relaxed">
-                        <div className="w-2 h-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full mt-2 shadow-sm flex-shrink-0"></div>
-                        <span className="font-semibold">AI-powered tier recommendations</span>
                       </li>
                       <li className="text-sm text-blue-800 flex items-start space-x-3 leading-relaxed">
                         <div className="w-2 h-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full mt-2 shadow-sm flex-shrink-0"></div>
