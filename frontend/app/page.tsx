@@ -84,8 +84,8 @@ export default function TierSense() {
   const [selectedDirectory, setSelectedDirectory] = useState("");
   const [selectedDirectoryType, setSelectedDirectoryType] = useState("");
 
-  // Heatmap zoom state
-  const [heatmapZoom, setHeatmapZoom] = useState(100);
+  // Heatmap zoom state - DEFAULT TO 50%
+  const [heatmapZoom, setHeatmapZoom] = useState(50);
   const [heatmapPosition, setHeatmapPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -129,8 +129,9 @@ export default function TierSense() {
     setHeatmapZoom(prev => Math.max(prev - 25, 50));
   };
 
+  // Reset to DEFAULT 50%
   const resetHeatmapView = () => {
-    setHeatmapZoom(100);
+    setHeatmapZoom(50);
     setHeatmapPosition({ x: 0, y: 0 });
   };
 
@@ -497,7 +498,7 @@ export default function TierSense() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Fixed Header - REMOVED Live Analytics */}
+      {/* Fixed Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-full mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -1139,6 +1140,12 @@ export default function TierSense() {
                                 <p className="text-xs text-gray-500 mt-1 break-all">
                                   {file.path}
                                 </p>
+                                {/* SHOW AI SUGGESTION */}
+                                {file.suggestion && (
+                                  <p className="text-xs text-blue-700 mt-2 bg-blue-50 p-2 rounded">
+                                    <strong>Suggestion:</strong> {file.suggestion}
+                                  </p>
+                                )}
                               </div>
                               <span
                                 className={`px-2 py-1 text-xs font-semibold rounded-full flex-shrink-0 ${getTierColor(file.tier)}`}
@@ -1148,7 +1155,7 @@ export default function TierSense() {
                             </div>
                             <div className="flex items-center justify-between text-xs text-gray-600">
                               <span>Access: {file.access_frequency}</span>
-                              <span>Score: {file.score}</span>
+                              <span>Score: {file.score || 0}</span>
                             </div>
                           </div>
                         ))}
@@ -1166,8 +1173,14 @@ export default function TierSense() {
                               </div>
                               <div className="text-xs text-gray-500 mt-1 flex items-center space-x-4">
                                 <span>Access frequency: {file.access_frequency}</span>
-                                <span>Score: {file.score}</span>
+                                <span>Score: {file.score || 0}</span>
                               </div>
+                              {/* SHOW AI SUGGESTION IN LIST VIEW TOO */}
+                              {file.suggestion && (
+                                <div className="text-xs text-blue-700 mt-1">
+                                  <strong>Suggestion:</strong> {file.suggestion}
+                                </div>
+                              )}
                             </div>
                             <span
                               className={`px-3 py-1.5 text-xs font-semibold rounded-full ml-3 flex-shrink-0 ${getTierColor(file.tier)}`}
