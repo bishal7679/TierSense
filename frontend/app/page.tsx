@@ -14,15 +14,11 @@ import {
   Calendar,
   RefreshCw,
   Zap,
-  Shield,
   Building2,
   TrendingUp,
   ChevronLeft,
   ChevronRight,
   GripVertical,
-  Folder,
-  FolderOpen,
-  HardDrive,
   ZoomIn,
   ZoomOut,
   RotateCcw,
@@ -56,16 +52,6 @@ import {
 } from "@/components/ui/tooltip";
 import { llmOptions } from "@/src/config/llmOptions";
 
-// Common directory suggestions for easier selection
-const commonDirectories = [
-  { label: "Data Directory", value: "/host-root/mnt/data", icon: <HardDrive className="h-4 w-4" /> },
-  { label: "NFS Mount", value: "/host-root/mnt/nfs", icon: <Folder className="h-4 w-4" /> },
-  { label: "Home Directory", value: "/host-root/home", icon: <FolderOpen className="h-4 w-4" /> },
-  { label: "Var Logs", value: "/host-root/var/log", icon: <FileText className="h-4 w-4" /> },
-  { label: "Optional Apps", value: "/host-root/opt", icon: <Building2 className="h-4 w-4" /> },
-  { label: "Custom Path", value: "custom", icon: <Folder className="h-4 w-4" /> },
-];
-
 export default function TierSense() {
   // Sidebar state
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -82,7 +68,6 @@ export default function TierSense() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyWarning, setApiKeyWarning] = useState("");
   const [selectedDirectory, setSelectedDirectory] = useState("");
-  const [selectedDirectoryType, setSelectedDirectoryType] = useState("");
 
   // Heatmap zoom state - DEFAULT TO 50%
   const [heatmapZoom, setHeatmapZoom] = useState(50);
@@ -201,8 +186,6 @@ export default function TierSense() {
     if (savedKey) setApiKey(savedKey);
     const savedDir = localStorage.getItem("tiersense_selected_directory");
     if (savedDir) setSelectedDirectory(savedDir);
-    const savedDirType = localStorage.getItem("tiersense_selected_directory_type");
-    if (savedDirType) setSelectedDirectoryType(savedDirType);
     fetchAvailableDates();
   }, []);
 
@@ -214,10 +197,6 @@ export default function TierSense() {
   useEffect(() => {
     if (selectedDirectory) localStorage.setItem("tiersense_selected_directory", selectedDirectory);
   }, [selectedDirectory]);
-
-  useEffect(() => {
-    if (selectedDirectoryType) localStorage.setItem("tiersense_selected_directory_type", selectedDirectoryType);
-  }, [selectedDirectoryType]);
 
   // Load settings including tierRanges when dialog opens
   useEffect(() => {
@@ -232,19 +211,6 @@ export default function TierSense() {
         .catch(console.error);
     }
   }, [showSettings]);
-
-  // Handle directory type selection
-  const handleDirectoryTypeChange = (value: string) => {
-    setSelectedDirectoryType(value);
-    if (value !== "custom") {
-      const selectedDir = commonDirectories.find(dir => dir.value === value);
-      if (selectedDir) {
-        setSelectedDirectory(selectedDir.value);
-      }
-    } else {
-      setSelectedDirectory("");
-    }
-  };
 
   // Normalize directory path to ensure proper /host-root prefix
   const normalizeDirectoryPath = (path: string): string => {
@@ -700,50 +666,19 @@ export default function TierSense() {
                     </Select>
                   </div>
 
-                  {/* Enhanced Directory Selection */}
+                  {/* Target Directory - Simplified Input Only */}
                   <div>
                     <Label className="text-sm font-medium text-gray-700 mb-2 block">
                       Target Directory
                     </Label>
-                    <div className="space-y-3">
-                      <Select value={selectedDirectoryType} onValueChange={handleDirectoryTypeChange}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Choose directory type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {commonDirectories.map((dir) => (
-                            <SelectItem key={dir.value} value={dir.value}>
-                              <div className="flex items-center space-x-2">
-                                {dir.icon}
-                                <span>{dir.label}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      
-                      {(selectedDirectoryType === "custom" || !selectedDirectoryType) && (
-                        <Input
-                          type="text"
-                          placeholder="/host-root/mnt/data"
-                          value={selectedDirectory}
-                          onChange={(e) => setSelectedDirectory(e.target.value)}
-                        />
-                      )}
-                      
-                      {selectedDirectory && selectedDirectoryType !== "custom" && (
-                        <div className="p-3 bg-gray-50 rounded-lg border">
-                          <div className="flex items-center space-x-2 text-sm text-gray-700">
-                            <HardDrive className="h-4 w-4" />
-                            <span className="font-medium">Selected Path:</span>
-                          </div>
-                          <code className="text-xs text-gray-600 mt-1 block bg-white p-2 rounded border">
-                            {selectedDirectory}
-                          </code>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
+                    <Input
+                      type="text"
+                      placeholder="/host-root/mnt/data"
+                      value={selectedDirectory}
+                      onChange={(e) => setSelectedDirectory(e.target.value)}
+                      className="mb-2"
+                    />
+                    <p className="text-xs text-gray-500">
                       Audit rules will be automatically configured for the selected directory
                     </p>
                   </div>
