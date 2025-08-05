@@ -566,7 +566,7 @@ export default function TierSense() {
                   <div className="mb-6">
                     <div className="flex items-center space-x-2 mb-4">
                       <Sparkles className="h-5 w-5 text-blue-600" />
-                      <h2 className="text-lg font-semibold text-gray-900">AI Analysis Setup</h2>
+                      <h2 className="text-lg font-semibold text-gray-900">Analysis Setup</h2>
                     </div>
                     <div className="h-1 w-full bg-gradient-to-r from-blue-600 to-purple-600 rounded-full"></div>
                   </div>
