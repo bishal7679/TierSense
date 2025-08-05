@@ -389,7 +389,7 @@ export default function TierSense() {
                   </div>
                   <div>
                     <h1 className="text-xl font-semibold text-gray-900">TierSense</h1>
-                    <p className="text-sm text-gray-500">AI-Powered Storage Intelligence</p>
+                    <p className="text-sm text-gray-500">Intelligent Storage Solution</p>
                   </div>
                 </div>
                 {dailyResetInfo?.isDailyReset && (
@@ -575,7 +575,7 @@ export default function TierSense() {
                     <div>
                       <Label htmlFor="llm-select" className="text-sm font-medium text-gray-700 mb-2 block flex items-center space-x-2">
                         <Zap className="h-4 w-4 text-blue-600" />
-                        <span>AI Model Provider</span>
+                        <span>Choose Model</span>
                       </Label>
                       <Select value={selectedLLM} onValueChange={setSelectedLLM}>
                         <SelectTrigger>
@@ -622,7 +622,7 @@ export default function TierSense() {
                       ) : (
                         <>
                           <Play className="h-4 w-4 mr-2" />
-                          Run AI Analysis
+                          Run Analysis
                         </>
                       )}
                     </Button>
@@ -642,12 +642,9 @@ export default function TierSense() {
                         <span>Enterprise Features</span>
                       </h3>
                       <ul className="text-xs text-blue-700 space-y-1">
-                        <li>• Real-time file access monitoring</li>
-                        <li>• AI-powered tier recommendations</li>
+                        <li>• Real-time tier recommendations</li>
                         <li>• Context-aware storage suggestions</li>
-                        <li>• Dynamic filesystem metadata</li>
                         <li>• Historical trend analysis</li>
-                        <li>• Cost optimization insights</li>
                       </ul>
                     </div>
                   </div>
@@ -661,7 +658,7 @@ export default function TierSense() {
                     <Sparkles className="h-6 w-6 text-blue-600" />
                   </div>
                   <div className="writing-mode-vertical text-sm font-medium text-gray-600 transform rotate-180">
-                    AI Analysis
+                    Analysis
                   </div>
                 </div>
               )}
