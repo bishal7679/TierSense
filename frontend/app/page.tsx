@@ -19,6 +19,9 @@ import {
   ChevronLeft,
   ChevronRight,
   GripVertical,
+  Folder,
+  FolderOpen,
+  HardDrive,
   ZoomIn,
   ZoomOut,
   RotateCcw,
@@ -52,6 +55,16 @@ import {
 } from "@/components/ui/tooltip";
 import { llmOptions } from "@/src/config/llmOptions";
 
+// Common directory suggestions for easier selection
+const commonDirectories = [
+  { label: "Data Directory", value: "/host-root/mnt/data", icon: <HardDrive className="h-4 w-4" /> },
+  { label: "NFS Mount", value: "/host-root/mnt/nfs", icon: <Folder className="h-4 w-4" /> },
+  { label: "Home Directory", value: "/host-root/home", icon: <FolderOpen className="h-4 w-4" /> },
+  { label: "Var Logs", value: "/host-root/var/log", icon: <FileText className="h-4 w-4" /> },
+  { label: "Optional Apps", value: "/host-root/opt", icon: <Building2 className="h-4 w-4" /> },
+  { label: "Custom Path", value: "custom", icon: <Folder className="h-4 w-4" /> },
+];
+
 export default function TierSense() {
   // Sidebar state
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -68,6 +81,7 @@ export default function TierSense() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyWarning, setApiKeyWarning] = useState("");
   const [selectedDirectory, setSelectedDirectory] = useState("");
+  const [selectedDirectoryType, setSelectedDirectoryType] = useState("");
 
   // Heatmap zoom state - DEFAULT TO 50%
   const [heatmapZoom, setHeatmapZoom] = useState(50);
@@ -186,6 +200,8 @@ export default function TierSense() {
     if (savedKey) setApiKey(savedKey);
     const savedDir = localStorage.getItem("tiersense_selected_directory");
     if (savedDir) setSelectedDirectory(savedDir);
+    const savedDirType = localStorage.getItem("tiersense_selected_directory_type");
+    if (savedDirType) setSelectedDirectoryType(savedDirType);
     fetchAvailableDates();
   }, []);
 
@@ -197,6 +213,10 @@ export default function TierSense() {
   useEffect(() => {
     if (selectedDirectory) localStorage.setItem("tiersense_selected_directory", selectedDirectory);
   }, [selectedDirectory]);
+
+  useEffect(() => {
+    if (selectedDirectoryType) localStorage.setItem("tiersense_selected_directory_type", selectedDirectoryType);
+  }, [selectedDirectoryType]);
 
   // Load settings including tierRanges when dialog opens
   useEffect(() => {
@@ -211,6 +231,19 @@ export default function TierSense() {
         .catch(console.error);
     }
   }, [showSettings]);
+
+  // Handle directory type selection
+  const handleDirectoryTypeChange = (value: string) => {
+    setSelectedDirectoryType(value);
+    if (value !== "custom") {
+      const selectedDir = commonDirectories.find(dir => dir.value === value);
+      if (selectedDir) {
+        setSelectedDirectory(selectedDir.value);
+      }
+    } else {
+      setSelectedDirectory("");
+    }
+  };
 
   // Normalize directory path to ensure proper /host-root prefix
   const normalizeDirectoryPath = (path: string): string => {
@@ -470,12 +503,12 @@ export default function TierSense() {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-3">
-                <div className="p-2 bg-blue-600 rounded-lg">
+                <div className="p-2 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-lg">
                   <BarChart3 className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-semibold text-gray-900">TierSense</h1>
-                  <p className="text-sm text-gray-500">Enterprise Storage Intelligence</p>
+                  <h1 className="text-xl font-bold text-gray-900">TierSense</h1>
+                  <p className="text-sm text-gray-600 font-medium">Enterprise Storage Intelligence</p>
                 </div>
               </div>
             </div>
@@ -484,14 +517,14 @@ export default function TierSense() {
                 onClick={handleManualReset}
                 variant="outline"
                 size="sm"
-                className="hover:bg-red-50 border-red-200 text-red-700 hover:text-red-800 hover:border-red-300"
+                className="hover:bg-red-50 border-red-200 text-red-700 hover:text-red-800 hover:border-red-300 font-medium shadow-sm"
               >
                 <RefreshCw className="h-4 w-4 mr-2 text-red-600" />
                 Reset
               </Button>
               <Dialog open={showSettings} onOpenChange={setShowSettings}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="hover:bg-gray-50">
+                  <Button variant="outline" size="sm" className="hover:bg-gray-50 font-medium shadow-sm">
                     <Settings className="h-4 w-4 mr-2" />
                     Settings
                   </Button>
@@ -505,7 +538,7 @@ export default function TierSense() {
                   </DialogHeader>
                   <div className="space-y-6">
                     <div>
-                      <Label htmlFor="settings-api-key" className="text-sm font-medium text-gray-700 mb-2 block">
+                      <Label htmlFor="settings-api-key" className="text-sm font-semibold text-gray-800 mb-3 block">
                         API Key
                       </Label>
                       <div className="relative">
@@ -515,12 +548,12 @@ export default function TierSense() {
                           value={apiKey}
                           onChange={(e) => setApiKey(e.target.value)}
                           placeholder="Enter your API key"
-                          className="pr-10"
+                          className="pr-10 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors"
                         />
                         <button
                           type="button"
                           onClick={() => setShowApiKey((v) => !v)}
-                          className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600"
+                          className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600 transition-colors"
                           tabIndex={-1}
                         >
                           {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -530,10 +563,10 @@ export default function TierSense() {
 
                     {/* Tier Ranges */}
                     <div className="pt-4 border-t border-gray-200">
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">Storage Tier Ranges</h4>
+                      <h4 className="text-sm font-bold text-gray-800 mb-4">Storage Tier Ranges</h4>
                       {(["HOT", "WARM", "COLD"] as const).map((tier) => (
-                        <div key={tier} className="flex items-center gap-3 mb-3">
-                          <div className={`px-2 py-1 rounded text-xs font-medium text-white ${
+                        <div key={tier} className="flex items-center gap-3 mb-4">
+                          <div className={`px-3 py-1.5 rounded-lg text-xs font-bold text-white shadow-sm ${
                             tier === "HOT" ? "bg-red-500" : tier === "WARM" ? "bg-orange-500" : "bg-blue-500"
                           }`}>
                             {tier}
@@ -547,9 +580,9 @@ export default function TierSense() {
                               const v = e.target.value === "" ? null : parseInt(e.target.value, 10);
                               setTierRanges((prev) => ({ ...prev, [tier]: [v, prev[tier][1]] }));
                             }}
-                            className="w-20 h-8"
+                            className="w-20 h-8 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500"
                           />
-                          <span className="text-gray-400">—</span>
+                          <span className="text-gray-400 font-bold">—</span>
                           <Input
                             type="number"
                             min={0}
@@ -559,13 +592,13 @@ export default function TierSense() {
                               const v = e.target.value === "" ? null : parseInt(e.target.value, 10);
                               setTierRanges((prev) => ({ ...prev, [tier]: [prev[tier][0], v] }));
                             }}
-                            className="w-20 h-8"
+                            className="w-20 h-8 border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500"
                           />
                         </div>
                       ))}
-                      {tierError && <p className="text-xs text-red-600 mt-1">{tierError}</p>}
+                      {tierError && <p className="text-xs text-red-600 mt-2 font-medium">{tierError}</p>}
                       <Button
-                        className="w-full mt-4 bg-blue-600 hover:bg-blue-700"
+                        className="w-full mt-6 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
                         onClick={async () => {
                           if (
                             tierRanges.HOT[0] !== null &&
@@ -613,7 +646,7 @@ export default function TierSense() {
         {/* Resizable Left Sidebar */}
         <aside 
           ref={sidebarRef}
-          className={`fixed left-0 top-20 h-screen bg-white border-r border-gray-200 overflow-hidden transition-all duration-200 ${
+          className={`fixed left-0 top-20 h-screen bg-white border-r border-gray-200 overflow-hidden transition-all duration-200 shadow-lg ${
             isResizing ? 'select-none' : ''
           }`}
           style={{ width: `${effectiveSidebarWidth}px` }}
@@ -625,7 +658,7 @@ export default function TierSense() {
               onClick={toggleSidebar}
               variant="ghost"
               size="sm"
-              className="absolute top-4 right-2 z-10 h-8 w-8 p-0 hover:bg-gray-100"
+              className="absolute top-4 right-2 z-10 h-8 w-8 p-0 hover:bg-gray-100 rounded-full shadow-sm"
             >
               {isCollapsed ? (
                 <ChevronRight className="h-4 w-4" />
@@ -639,21 +672,23 @@ export default function TierSense() {
               isCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'
             }`}>
               <div className="p-6">
-                <div className="mb-6">
-                  <div className="flex items-center space-x-2 mb-4">
-                    <Zap className="h-5 w-5 text-blue-600" />
-                    <h2 className="text-lg font-semibold text-gray-900">Analysis Setup</h2>
+                <div className="mb-8">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="p-2 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-lg">
+                      <Zap className="h-5 w-5 text-white" />
+                    </div>
+                    <h2 className="text-lg font-bold text-gray-900">Analysis Setup</h2>
                   </div>
-                  <div className="h-1 w-full bg-blue-600 rounded-full"></div>
+                  <div className="h-1 w-full bg-gradient-to-r from-blue-600 to-blue-700 rounded-full shadow-sm"></div>
                 </div>
 
-                <div className="space-y-6">
+                <div className="space-y-8">
                   <div>
-                    <Label htmlFor="llm-select" className="text-sm font-medium text-gray-700 mb-2 block">
+                    <Label htmlFor="llm-select" className="text-sm font-bold text-gray-800 mb-3 block">
                       AI Model Provider
                     </Label>
                     <Select value={selectedLLM} onValueChange={setSelectedLLM}>
-                      <SelectTrigger>
+                      <SelectTrigger className="border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors font-medium shadow-sm">
                         <SelectValue placeholder="Choose Model" />
                       </SelectTrigger>
                       <SelectContent>
@@ -666,19 +701,51 @@ export default function TierSense() {
                     </Select>
                   </div>
 
-                  {/* Target Directory - Simplified Input Only */}
+                  {/* Enhanced Directory Selection */}
                   <div>
-                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                    <Label className="text-sm font-bold text-gray-800 mb-3 block">
                       Target Directory
                     </Label>
-                    <Input
-                      type="text"
-                      placeholder="/host-root/mnt/data"
-                      value={selectedDirectory}
-                      onChange={(e) => setSelectedDirectory(e.target.value)}
-                      className="mb-2"
-                    />
-                    <p className="text-xs text-gray-500">
+                    <div className="space-y-4">
+                      <Select value={selectedDirectoryType} onValueChange={handleDirectoryTypeChange}>
+                        <SelectTrigger className="border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors font-medium shadow-sm">
+                          <SelectValue placeholder="Choose directory type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {commonDirectories.map((dir) => (
+                            <SelectItem key={dir.value} value={dir.value}>
+                              <div className="flex items-center space-x-2">
+                                {dir.icon}
+                                <span className="font-medium">{dir.label}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      
+                      {(selectedDirectoryType === "custom" || !selectedDirectoryType) && (
+                        <Input
+                          type="text"
+                          placeholder="/host-root/mnt/data"
+                          value={selectedDirectory}
+                          onChange={(e) => setSelectedDirectory(e.target.value)}
+                          className="border-2 border-gray-200 hover:border-blue-300 focus:border-blue-500 transition-colors font-medium"
+                        />
+                      )}
+                      
+                      {selectedDirectory && selectedDirectoryType !== "custom" && (
+                        <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg border border-gray-200 shadow-sm">
+                          <div className="flex items-center space-x-2 text-sm text-gray-700 mb-2">
+                            <HardDrive className="h-4 w-4 text-blue-600" />
+                            <span className="font-bold">Selected Path:</span>
+                          </div>
+                          <code className="text-xs text-gray-800 font-mono bg-white p-3 rounded-lg border shadow-sm block">
+                            {selectedDirectory}
+                          </code>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-600 mt-3 leading-relaxed font-medium">
                       Audit rules will be automatically configured for the selected directory
                     </p>
                   </div>
@@ -686,39 +753,59 @@ export default function TierSense() {
                   <Button
                     onClick={handleRunAnalysis}
                     disabled={!selectedLLM || isAnalyzing || !apiKey || !selectedDirectory}
-                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 py-4 font-bold text-base shadow-lg hover:shadow-xl transition-all duration-200"
                   >
                     {isAnalyzing ? (
                       <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-3"></div>
                         Analyzing...
                       </>
                     ) : (
                       <>
-                        <Play className="h-4 w-4 mr-2" />
+                        <Play className="h-5 w-5 mr-3" />
                         Run Analysis
                       </>
                     )}
                   </Button>
                   {apiKeyWarning && (
-                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                      <p className="text-xs text-red-600">{apiKeyWarning}</p>
+                    <div className="p-4 bg-red-50 border-l-4 border-red-400 rounded-r-lg shadow-sm">
+                      <p className="text-sm text-red-700 font-semibold">{apiKeyWarning}</p>
                     </div>
                   )}
 
-                  {/* Enterprise Features */}
-                  <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <h3 className="text-sm font-semibold text-blue-900 mb-2 flex items-center space-x-2">
-                      <TrendingUp className="h-4 w-4" />
+                  {/* Enterprise Features - Enhanced with Better Styling */}
+                  <div className="mt-8 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl shadow-lg">
+                    <h3 className="text-base font-black text-blue-900 mb-5 flex items-center space-x-3">
+                      <div className="p-2 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-lg">
+                        <TrendingUp className="h-5 w-5 text-white" />
+                      </div>
                       <span>Enterprise Features</span>
                     </h3>
-                    <ul className="text-xs text-blue-700 space-y-1">
-                      <li>• Multi-directory analysis support</li>
-                      <li>• Automated audit rule configuration</li>
-                      <li>• Real-time file access monitoring</li>
-                      <li>• AI-powered tier recommendations</li>
-                      <li>• Historical trend analysis</li>
-                      <li>• Cost optimization insights</li>
+                    <ul className="space-y-3">
+                      <li className="text-sm text-blue-800 flex items-start space-x-3 leading-relaxed">
+                        <div className="w-2 h-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full mt-2 shadow-sm flex-shrink-0"></div>
+                        <span className="font-semibold">Multi-directory analysis support</span>
+                      </li>
+                      <li className="text-sm text-blue-800 flex items-start space-x-3 leading-relaxed">
+                        <div className="w-2 h-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full mt-2 shadow-sm flex-shrink-0"></div>
+                        <span className="font-semibold">Automated audit rule configuration</span>
+                      </li>
+                      <li className="text-sm text-blue-800 flex items-start space-x-3 leading-relaxed">
+                        <div className="w-2 h-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full mt-2 shadow-sm flex-shrink-0"></div>
+                        <span className="font-semibold">Real-time file access monitoring</span>
+                      </li>
+                      <li className="text-sm text-blue-800 flex items-start space-x-3 leading-relaxed">
+                        <div className="w-2 h-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full mt-2 shadow-sm flex-shrink-0"></div>
+                        <span className="font-semibold">AI-powered tier recommendations</span>
+                      </li>
+                      <li className="text-sm text-blue-800 flex items-start space-x-3 leading-relaxed">
+                        <div className="w-2 h-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full mt-2 shadow-sm flex-shrink-0"></div>
+                        <span className="font-semibold">Historical trend analysis</span>
+                      </li>
+                      <li className="text-sm text-blue-800 flex items-start space-x-3 leading-relaxed">
+                        <div className="w-2 h-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full mt-2 shadow-sm flex-shrink-0"></div>
+                        <span className="font-semibold">Cost optimization insights</span>
+                      </li>
                     </ul>
                   </div>
                 </div>
@@ -728,10 +815,10 @@ export default function TierSense() {
             {/* Collapsed State Icon */}
             {isCollapsed && (
               <div className="flex flex-col items-center justify-center h-full space-y-4">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Zap className="h-6 w-6 text-blue-600" />
+                <div className="p-3 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl shadow-lg">
+                  <Zap className="h-7 w-7 text-blue-600" />
                 </div>
-                <div className="writing-mode-vertical text-sm font-medium text-gray-600 transform rotate-180">
+                <div className="writing-mode-vertical text-sm font-bold text-gray-600 transform rotate-180">
                   Analysis
                 </div>
               </div>
@@ -760,21 +847,23 @@ export default function TierSense() {
             <div className="space-y-6">
               {/* Daily Reset Banner */}
               {dailyResetInfo?.isDailyReset && (
-                <Card className="bg-blue-50 border-blue-200">
-                  <CardContent className="p-4">
+                <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 shadow-lg">
+                  <CardContent className="p-6">
                     <div className="flex items-center">
-                      <Calendar className="h-5 w-5 text-blue-600 mr-3" />
+                      <div className="p-3 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-lg mr-4">
+                        <Calendar className="h-6 w-6 text-white" />
+                      </div>
                       <div>
-                        <h3 className="text-sm font-medium text-blue-800">Real-time Analytics Active</h3>
-                        <p className="text-xs text-blue-600 mt-1">
+                        <h3 className="text-base font-bold text-blue-800">Real-time Analytics Active</h3>
+                        <p className="text-sm text-blue-600 mt-2 font-medium">
                           Access patterns refresh daily at {dailyResetInfo.resetTime} | Current session: {dailyResetInfo.date}
                         </p>
                         {dailyResetInfo.message && (
-                          <p className="text-xs text-blue-600 mt-1">{dailyResetInfo.message}</p>
+                          <p className="text-sm text-blue-600 mt-1 font-medium">{dailyResetInfo.message}</p>
                         )}
                         {results.search_info?.directory && (
-                          <p className="text-xs text-blue-600 mt-1">
-                            Monitoring directory: <code className="bg-blue-100 px-1 rounded">{results.search_info.directory}</code>
+                          <p className="text-sm text-blue-600 mt-2 font-medium">
+                            Monitoring directory: <code className="bg-blue-100 px-2 py-1 rounded font-mono text-xs">{results.search_info.directory}</code>
                           </p>
                         )}
                       </div>
@@ -784,66 +873,68 @@ export default function TierSense() {
               )}
 
               {/* Summary Statistics */}
-              <Card>
-                <CardHeader className="flex items-center justify-between">
-                  <CardTitle className="text-lg font-semibold text-gray-900">
+              <Card className="shadow-lg border-gray-200">
+                <CardHeader className="flex items-center justify-between bg-gradient-to-r from-gray-50 to-gray-100 rounded-t-lg">
+                  <CardTitle className="text-xl font-bold text-gray-900">
                     {results.search_info?.title || "Storage Analysis Summary"}
                   </CardTitle>
-                  <Button onClick={exportResults} variant="outline" size="sm">
+                  <Button onClick={exportResults} variant="outline" size="sm" className="font-semibold shadow-sm">
                     <Download className="h-4 w-4 mr-2" />
                     Export
                   </Button>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-4 gap-4">
-                    <div className="text-center p-4 bg-gray-50 rounded-lg">
-                      <div className="text-2xl font-bold text-gray-900">
+                <CardContent className="p-6">
+                  <div className="grid grid-cols-4 gap-6">
+                    <div className="text-center p-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl shadow-sm border border-gray-200">
+                      <div className="text-3xl font-black text-gray-900">
                         {(results.summary?.total_files ?? results.search_info?.total_files ?? 0).toLocaleString()}
                       </div>
-                      <div className="text-sm text-gray-600 mt-1">Total Files</div>
+                      <div className="text-sm text-gray-600 mt-2 font-bold">Total Files</div>
                     </div>
-                    <div className="text-center p-4 bg-red-50 rounded-lg">
-                      <div className="text-2xl font-bold text-red-600">
+                    <div className="text-center p-6 bg-gradient-to-br from-red-50 to-red-100 rounded-xl shadow-sm border border-red-200">
+                      <div className="text-3xl font-black text-red-600">
                         {results.summary?.hot_tier ?? 0}
                       </div>
-                      <div className="text-sm text-red-600 mt-1">HOT</div>
+                      <div className="text-sm text-red-600 mt-2 font-bold">HOT</div>
                     </div>
-                    <div className="text-center p-4 bg-orange-50 rounded-lg">
-                      <div className="text-2xl font-bold text-orange-600">
+                    <div className="text-center p-6 bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl shadow-sm border border-orange-200">
+                      <div className="text-3xl font-black text-orange-600">
                         {results.summary?.warm_tier ?? 0}
                       </div>
-                      <div className="text-sm text-orange-600 mt-1">WARM</div>
+                      <div className="text-sm text-orange-600 mt-2 font-bold">WARM</div>
                     </div>
-                    <div className="text-center p-4 bg-blue-50 rounded-lg">
-                      <div className="text-2xl font-bold text-blue-600">
+                    <div className="text-center p-6 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl shadow-sm border border-blue-200">
+                      <div className="text-3xl font-black text-blue-600">
                         {results.summary?.cold_tier ?? 0}
                       </div>
-                      <div className="text-sm text-blue-600 mt-1">COLD</div>
+                      <div className="text-sm text-blue-600 mt-2 font-bold">COLD</div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
               {/* Heatmap & Filters with Zoom Controls */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center text-lg font-semibold text-gray-900">
-                    <BarChart3 className="h-5 w-5 mr-2 text-blue-600" />
+              <Card className="shadow-lg border-gray-200">
+                <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-t-lg">
+                  <CardTitle className="flex items-center text-xl font-bold text-gray-900">
+                    <BarChart3 className="h-6 w-6 mr-3 text-blue-600" />
                     Access Heatmap & Filters
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-6">
+                <CardContent className="space-y-6 p-6">
                   {/* Filter Controls */}
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <div className="flex items-center mb-3 space-x-2">
-                      <Filter className="h-4 w-4 text-gray-600" />
-                      <span className="text-sm font-medium text-gray-700">Visualization Controls</span>
+                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200 shadow-sm">
+                    <div className="flex items-center mb-4 space-x-3">
+                      <div className="p-2 bg-gradient-to-br from-gray-600 to-gray-700 rounded-lg shadow-lg">
+                        <Filter className="h-4 w-4 text-white" />
+                      </div>
+                      <span className="text-base font-bold text-gray-800">Visualization Controls</span>
                     </div>
                     <div className="flex flex-wrap items-end gap-4">
                       <div>
-                        <Label className="text-xs text-gray-600">Search Type</Label>
+                        <Label className="text-xs text-gray-600 font-bold">Search Type</Label>
                         <Select value={searchType} onValueChange={setSearchType}>
-                          <SelectTrigger className="h-8 w-32">
+                          <SelectTrigger className="h-9 w-36 border-2 border-gray-200 hover:border-blue-300 font-medium">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -855,9 +946,9 @@ export default function TierSense() {
                         </Select>
                       </div>
                       <div>
-                        <Label className="text-xs text-gray-600">Display Count</Label>
+                        <Label className="text-xs text-gray-600 font-bold">Display Count</Label>
                         <Select value={topN.toString()} onValueChange={(v) => setTopN(+v)}>
-                          <SelectTrigger className="h-8 w-24">
+                          <SelectTrigger className="h-9 w-28 border-2 border-gray-200 hover:border-blue-300 font-medium">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -870,9 +961,9 @@ export default function TierSense() {
                       </div>
                       {searchType === "date" && (
                         <div>
-                          <Label className="text-xs text-gray-600">Select Date</Label>
+                          <Label className="text-xs text-gray-600 font-bold">Select Date</Label>
                           <Select value={selectedDate} onValueChange={setSelectedDate}>
-                            <SelectTrigger className="h-8 w-32">
+                            <SelectTrigger className="h-9 w-36 border-2 border-gray-200 hover:border-blue-300 font-medium">
                               <SelectValue placeholder="Choose date" />
                             </SelectTrigger>
                             <SelectContent>
@@ -888,50 +979,50 @@ export default function TierSense() {
                       {searchType === "range" && (
                         <>
                           <div>
-                            <Label className="text-xs text-gray-600">Start Date</Label>
+                            <Label className="text-xs text-gray-600 font-bold">Start Date</Label>
                             <Input
                               type="date"
                               value={startDate}
                               onChange={(e) => setStartDate(e.target.value)}
-                              className="h-8 w-36"
+                              className="h-9 w-40 border-2 border-gray-200 hover:border-blue-300 font-medium"
                             />
                           </div>
                           <div>
-                            <Label className="text-xs text-gray-600">End Date</Label>
+                            <Label className="text-xs text-gray-600 font-bold">End Date</Label>
                             <Input
                               type="date"
                               value={endDate}
                               onChange={(e) => setEndDate(e.target.value)}
-                              className="h-8 w-36"
+                              className="h-9 w-40 border-2 border-gray-200 hover:border-blue-300 font-medium"
                             />
                           </div>
                         </>
                       )}
                       {searchType === "pattern" && (
                         <div>
-                          <Label className="text-xs text-gray-600">File Pattern</Label>
+                          <Label className="text-xs text-gray-600 font-bold">File Pattern</Label>
                           <Input
                             placeholder="e.g., .log, report"
                             value={filePattern}
                             onChange={(e) => setFilePattern(e.target.value)}
-                            className="h-8 w-48"
+                            className="h-9 w-52 border-2 border-gray-200 hover:border-blue-300 font-medium"
                           />
                         </div>
                       )}
-                      <div className="flex ml-auto space-x-2">
-                        <Button onClick={clearSearch} variant="outline" size="sm" className="h-8">
+                      <div className="flex ml-auto space-x-3">
+                        <Button onClick={clearSearch} variant="outline" size="sm" className="h-9 font-semibold shadow-sm">
                           Clear
                         </Button>
                         <Button
                           onClick={handleAdvancedSearch}
                           disabled={isSearching}
                           size="sm"
-                          className="h-8 bg-blue-600 hover:bg-blue-700"
+                          className="h-9 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 font-semibold shadow-lg"
                         >
-                          <Search className="h-3 w-3 mr-1" />
+                          <Search className="h-4 w-4 mr-2" />
                           {isSearching ? (
                             <>
-                              <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent mr-1"></div>
+                              <div className="animate-spin rounded-full h-4 w-4 border border-white border-t-transparent mr-2"></div>
                               Searching...
                             </>
                           ) : (
@@ -943,22 +1034,22 @@ export default function TierSense() {
                   </div>
 
                   {/* Heatmap Display with Zoom Controls */}
-                  <div className="bg-white rounded-lg border border-gray-200">
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-lg">
                     {/* Zoom Controls */}
                     {heatmapUrl && (
-                      <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-600">Zoom:</span>
+                      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100 rounded-t-xl">
+                        <div className="flex items-center space-x-3">
+                          <span className="text-sm text-gray-700 font-bold">Zoom:</span>
                           <Button
                             onClick={handleZoomOut}
                             disabled={heatmapZoom <= 50}
                             variant="outline"
                             size="sm"
-                            className="h-7 w-7 p-0"
+                            className="h-8 w-8 p-0 shadow-sm"
                           >
-                            <ZoomOut className="h-3 w-3" />
+                            <ZoomOut className="h-4 w-4" />
                           </Button>
-                          <span className="text-sm font-medium text-gray-700 min-w-[50px] text-center">
+                          <span className="text-sm font-black text-gray-800 min-w-[60px] text-center bg-white px-3 py-1 rounded-lg border shadow-sm">
                             {heatmapZoom}%
                           </span>
                           <Button
@@ -966,21 +1057,21 @@ export default function TierSense() {
                             disabled={heatmapZoom >= 300}
                             variant="outline"
                             size="sm"
-                            className="h-7 w-7 p-0"
+                            className="h-8 w-8 p-0 shadow-sm"
                           >
-                            <ZoomIn className="h-3 w-3" />
+                            <ZoomIn className="h-4 w-4" />
                           </Button>
                           <Button
                             onClick={resetHeatmapView}
                             variant="outline"
                             size="sm"
-                            className="h-7 px-2"
+                            className="h-8 px-3 font-semibold shadow-sm"
                           >
-                            <RotateCcw className="h-3 w-3 mr-1" />
+                            <RotateCcw className="h-4 w-4 mr-2" />
                             Reset
                           </Button>
                         </div>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-gray-600 font-medium">
                           {heatmapZoom > 100 && "Click and drag to pan"}
                         </div>
                       </div>
@@ -1020,9 +1111,9 @@ export default function TierSense() {
                       ) : (
                         <div className="h-full flex items-center justify-center text-gray-500">
                           <div className="text-center">
-                            <BarChart3 className="mx-auto mb-4 h-16 w-16 opacity-30" />
-                            <p className="text-lg font-medium">Intelligence Visualization</p>
-                            <p className="text-sm">Run analysis to generate enterprise storage insights</p>
+                            <BarChart3 className="mx-auto mb-6 h-20 w-20 opacity-30" />
+                            <p className="text-xl font-bold text-gray-700">Intelligence Visualization</p>
+                            <p className="text-base text-gray-600 mt-2 font-medium">Run analysis to generate enterprise storage insights</p>
                           </div>
                         </div>
                       )}
@@ -1033,10 +1124,10 @@ export default function TierSense() {
 
               {/* Enhanced AI File Analysis Results */}
               {results.analysis?.length > 0 && (
-                <Card>
-                  <CardHeader>
+                <Card className="shadow-lg border-gray-200">
+                  <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-t-lg">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg font-semibold text-gray-900">
+                      <CardTitle className="text-xl font-bold text-gray-900">
                         AI Classification Results
                       </CardTitle>
                       <div className="flex items-center space-x-2">
@@ -1044,7 +1135,7 @@ export default function TierSense() {
                           onClick={() => setSuggestionsViewMode('grid')}
                           variant={suggestionsViewMode === 'grid' ? 'default' : 'outline'}
                           size="sm"
-                          className="h-8 w-8 p-0"
+                          className="h-9 w-9 p-0 shadow-sm"
                         >
                           <Grid3X3 className="h-4 w-4" />
                         </Button>
@@ -1052,73 +1143,73 @@ export default function TierSense() {
                           onClick={() => setSuggestionsViewMode('list')}
                           variant={suggestionsViewMode === 'list' ? 'default' : 'outline'}
                           size="sm"
-                          className="h-8 w-8 p-0"
+                          className="h-9 w-9 p-0 shadow-sm"
                         >
                           <List className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="p-6">
                     {suggestionsViewMode === 'grid' ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {results.analysis.map((file: any, idx: number) => (
                           <div
                             key={idx}
-                            className="p-4 border border-gray-200 rounded-lg bg-white hover:shadow-md transition-shadow"
+                            className="p-5 border border-gray-200 rounded-xl bg-white hover:shadow-lg transition-shadow duration-200"
                           >
-                            <div className="flex items-start justify-between mb-3">
-                              <div className="flex-1 mr-2">
-                                <h4 className="font-medium text-sm text-gray-900 break-words">
+                            <div className="flex items-start justify-between mb-4">
+                              <div className="flex-1 mr-3">
+                                <h4 className="font-bold text-sm text-gray-900 break-words">
                                   {file.path.split('/').pop() || file.path}
                                 </h4>
-                                <p className="text-xs text-gray-500 mt-1 break-all">
+                                <p className="text-xs text-gray-500 mt-2 break-all font-medium">
                                   {file.path}
                                 </p>
                                 {/* SHOW AI SUGGESTION */}
                                 {file.suggestion && (
-                                  <p className="text-xs text-blue-700 mt-2 bg-blue-50 p-2 rounded">
+                                  <p className="text-xs text-blue-700 mt-3 bg-blue-50 p-3 rounded-lg border border-blue-200">
                                     <strong>Suggestion:</strong> {file.suggestion}
                                   </p>
                                 )}
                               </div>
                               <span
-                                className={`px-2 py-1 text-xs font-semibold rounded-full flex-shrink-0 ${getTierColor(file.tier)}`}
+                                className={`px-3 py-1.5 text-xs font-bold rounded-full flex-shrink-0 shadow-sm ${getTierColor(file.tier)}`}
                               >
                                 {file.tier}
                               </span>
                             </div>
                             <div className="flex items-center justify-between text-xs text-gray-600">
-                              <span>Access: {file.access_frequency}</span>
-                              <span>Score: {file.score || 0}</span>
+                              <span className="font-semibold">Access: {file.access_frequency}</span>
+                              <span className="font-semibold">Score: {file.score || 0}</span>
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {results.analysis.map((file: any, idx: number) => (
                           <div
                             key={idx}
-                            className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
+                            className="flex items-center justify-between p-4 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition-colors duration-200"
                           >
                             <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm text-gray-900 truncate">
+                              <div className="font-bold text-sm text-gray-900 truncate">
                                 {file.path}
                               </div>
-                              <div className="text-xs text-gray-500 mt-1 flex items-center space-x-4">
-                                <span>Access frequency: {file.access_frequency}</span>
-                                <span>Score: {file.score || 0}</span>
+                              <div className="text-xs text-gray-500 mt-2 flex items-center space-x-6">
+                                <span className="font-semibold">Access frequency: {file.access_frequency}</span>
+                                <span className="font-semibold">Score: {file.score || 0}</span>
                               </div>
                               {/* SHOW AI SUGGESTION IN LIST VIEW TOO */}
                               {file.suggestion && (
-                                <div className="text-xs text-blue-700 mt-1">
+                                <div className="text-xs text-blue-700 mt-2 font-medium">
                                   <strong>Suggestion:</strong> {file.suggestion}
                                 </div>
                               )}
                             </div>
                             <span
-                              className={`px-3 py-1.5 text-xs font-semibold rounded-full ml-3 flex-shrink-0 ${getTierColor(file.tier)}`}
+                              className={`px-4 py-2 text-xs font-bold rounded-full ml-4 flex-shrink-0 shadow-sm ${getTierColor(file.tier)}`}
                             >
                               {file.tier}
                             </span>
@@ -1126,8 +1217,8 @@ export default function TierSense() {
                         ))}
                       </div>
                     )}
-                    <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                      <p className="text-sm text-blue-800">
+                    <div className="mt-6 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200 shadow-sm">
+                      <p className="text-sm text-blue-800 font-semibold leading-relaxed">
                         <strong>AI Recommendations:</strong> Files are classified based on access patterns. 
                         HOT tier files should be on fast storage, WARM tier on standard storage, 
                         and COLD tier can be archived to reduce costs.
@@ -1138,28 +1229,28 @@ export default function TierSense() {
               )}
 
               {/* JSON Output */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center text-lg font-semibold text-gray-900">
-                    <FileText className="h-5 w-5 mr-2 text-blue-600" />
+              <Card className="shadow-lg border-gray-200">
+                <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-t-lg">
+                  <CardTitle className="flex items-center text-xl font-bold text-gray-900">
+                    <FileText className="h-6 w-6 mr-3 text-blue-600" />
                     Raw JSON Output
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
                   <Textarea
                     value={JSON.stringify(results, null, 2)}
                     readOnly
-                    className="h-64 resize-none font-mono text-sm bg-gray-50"
+                    className="h-64 resize-none font-mono text-sm bg-gray-50 border-2 border-gray-200"
                   />
                 </CardContent>
               </Card>
             </div>
           ) : (
-            <Card className="h-96 flex items-center justify-center">
+            <Card className="h-96 flex items-center justify-center shadow-lg border-gray-200">
               <div className="text-center text-gray-500">
-                <BarChart3 className="mx-auto mb-6 h-16 w-16 opacity-30" />
-                <p className="text-xl font-medium text-gray-700">Ready for Enterprise Analysis</p>
-                <p className="text-sm text-gray-500 mt-2">
+                <BarChart3 className="mx-auto mb-8 h-24 w-24 opacity-30" />
+                <p className="text-2xl font-bold text-gray-700">Ready for Enterprise Analysis</p>
+                <p className="text-base text-gray-600 mt-4 font-medium">
                   Configure your AI model and target directory in the analysis panel, then run intelligent storage tiering analysis
                 </p>
               </div>
@@ -1168,15 +1259,15 @@ export default function TierSense() {
         </main>
       </div>
 
-      {/* Simple Loading Overlay */}
+      {/* Enhanced Loading Overlay */}
       {(isAnalyzing || isSearching) && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
-          <div className="bg-white rounded-lg shadow-lg p-8 flex flex-col items-center space-y-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent"></div>
-            <div className="text-lg font-medium text-gray-800">
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+          <div className="bg-white rounded-xl shadow-2xl p-10 flex flex-col items-center space-y-6 border border-gray-200">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent shadow-lg"></div>
+            <div className="text-xl font-bold text-gray-800">
               {isAnalyzing ? "Analyzing..." : "Searching..."}
             </div>
-            <div className="text-sm text-gray-500">
+            <div className="text-base text-gray-600 font-medium">
               {isAnalyzing ? "Processing your data" : "Finding results"}
             </div>
           </div>
