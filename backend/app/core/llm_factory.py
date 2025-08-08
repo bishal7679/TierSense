@@ -4,6 +4,7 @@ import re
 from typing import Dict, Any
 from datetime import datetime
 from app.core.llms import gemini, gpt, claude, llama, deepseek
+
 LLM_DISPATCH = {
     "gemini": lambda counts, key, **kw: gemini.generate(counts, key),
     "gpt":    lambda counts, key, **kw: gpt.generate(counts, key, model=kw.get("model")),
@@ -14,7 +15,6 @@ LLM_DISPATCH = {
     "llama":  lambda counts, key, **kw: llama.generate(counts, key, model=kw.get("model"), base_url=kw.get("base_url")),
     "deepseek": lambda counts, key, **kw: deepseek.generate(counts, key, model=kw.get("model")),
 }
-
 
 def generate_tiering_suggestions(
     llm_type: str,
