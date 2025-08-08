@@ -2,16 +2,8 @@ import os
 import json
 import re
 from typing import Dict, Any
-
+from datetime import datetime
 from app.core.llms import gemini, gpt, claude, llama, deepseek
-
-
-# Dispatch map:
-# - gpt/openai => OpenAI SDK (any GPT model via kwargs["model"])
-# - claude     => Anthropic SDK (any Claude model via kwargs["model"])
-# - llama/ollama => OpenAI-compatible LLaMA endpoint (or custom base_url) via kwargs["model"], kwargs["base_url"]
-# - deepseek   => DeepSeek HTTP API (any model via kwargs["model"])
-# - gemini     => Google Generative AI (fixed model internally or extend similarly)
 LLM_DISPATCH = {
     "gemini": lambda counts, key, **kw: gemini.generate(counts, key),
     "gpt":    lambda counts, key, **kw: gpt.generate(counts, key, model=kw.get("model")),
