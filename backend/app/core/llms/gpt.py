@@ -1,74 +1,59 @@
-import os
-import json
-import requests
-import re
-from app.core.llms.shared_prompt import build_prompt  # Shared strict prompt
+from typing import Optional, Iterable
+from openai import OpenAI
+from app.core.llms.shared_prompt import build_prompt
 
-# OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+# Default OpenAI model; can be overridden per request
+DEFAULT_GPT_MODEL = "gpt-4o-mini"
 
-def generate(access_counts: dict, api_key: str = None) -> str:
+# Optional allowlist. Set to None to allow any OpenAI model string.
+ALLOWED_OPENAI_MODELS: Optional[Iterable[str]] = {
+    "gpt-4o",
+    "gpt-4o-mini",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "o4-mini",
+    "o4",
+    # add more as needed
+}
+
+def _client(api_key: str) -> OpenAI:
+    if not api_key:
+        raise ValueError("GPT API error: API key is required but missing.")
+    return OpenAI(api_key=api_key)
+
+def generate(access_counts: dict, api_key: str, model: Optional[str] = None) -> str:
+    """
+    Generate HOT/WARM/COLD classifications with any OpenAI GPT-family model.
+
+    - Uses OpenAI official SDK (no OpenRouter).
+    - Requires explicit api_key (no env fallback).
+    - model: any OpenAI model string; defaults to DEFAULT_GPT_MODEL.
+    - Returns raw text; llm_factory handles JSON cleaning/parsing.
+    """
     if not access_counts:
         return "No access data provided."
 
+    chosen_model = (model or DEFAULT_GPT_MODEL).strip()
+
+    # Optional safeguard: enforce allowlist to avoid typos/unsupported names
+    if ALLOWED_OPENAI_MODELS is not None and chosen_model not in ALLOWED_OPENAI_MODELS:
+        raise ValueError(f"GPT API error: Model '{chosen_model}' is not allowed.")
+
+    client = _client(api_key)
     prompt = build_prompt(access_counts)
 
-    # Fallback to env if no key passed
-    final_key = api_key or os.getenv("OPENROUTER_API_KEY")
-
-    if not final_key:
-        return "No API key provided."
-
-    headers = {
-        "Authorization": f"Bearer {final_key}",
-        "Content-Type": "application/json",
-        "X-Title": "TierSense"
-    }
-
-    payload = {
-        "model": "mistralai/mistral-7b-instruct:free",  # or openai/gpt-3.5-turbo etc.
-        "messages": [{"role": "user", "content": prompt}]
-    }
-
     try:
-        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-        response.raise_for_status()
+        resp = client.chat.completions.create(
+            model=chosen_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,   # keep JSON consistent
+            max_tokens=2000
+        )
 
-        data = response.json()
-        if not data.get("choices") or "message" not in data["choices"][0]:
-            raise ValueError("Empty or malformed LLM response")
+        if not resp or not resp.choices or not resp.choices[0].message or not resp.choices[0].message.content:
+            raise ValueError("GPT API returned an invalid response.")
 
-        raw = data["choices"][0]["message"]["content"].strip()
-
-        # Save raw output for inspection
-        log_path = "logs/llm_raw_output.log"
-        try:
-            os.makedirs(os.path.dirname(log_path), exist_ok=True)
-            with open(log_path, "w") as f:
-                f.write(raw)
-        except Exception as log_err:
-            print(f"Failed to write raw output: {log_err}")
-
-        return _extract_json(raw)
+        return resp.choices[0].message.content.strip()
 
     except Exception as e:
-        return f"LLM error: {e}"
-
-
-def _extract_json(raw: str) -> str:
-    """
-    Cleans and parses JSON from LLM response that might include markdown fences or extra text.
-    """
-    # Strip common markdown formatting
-    cleaned = re.sub(r"```(?:json)?\s*([\s\S]*?)\s*```", r"\1", raw).strip()
-
-    # Attempt to find only JSON-like structure in case of extra wrapping
-    json_start = cleaned.find('{')
-    json_end = cleaned.rfind('}')
-    if json_start != -1 and json_end != -1:
-        cleaned = cleaned[json_start:json_end+1]
-
-    try:
-        parsed = json.loads(cleaned)
-        return json.dumps(parsed, indent=2)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"LLM did not return valid JSON: {e}")
+        raise ValueError(f"GPT API error: {e}")

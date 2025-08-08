@@ -1,59 +1,66 @@
-import os
-import json
-import requests
-import re
-from app.core.llms.shared_prompt import build_prompt 
+from typing import Optional, Iterable
+from anthropic import Anthropic
+from app.core.llms.shared_prompt import build_prompt
 
-# OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+# Default Claude model; can be overridden per request
+DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-20240620"
 
-def generate(access_counts: dict, api_key: str = None) -> str:
+# Optional allowlist to restrict usable models. Set to None to allow any.
+ALLOWED_ANTHROPIC_MODELS: Optional[Iterable[str]] = {
+    "claude-3-5-sonnet-20240620",
+    "claude-3-5-sonnet-latest",
+    "claude-3-5-haiku-latest",
+    "claude-3-opus-20240229",
+    "claude-3-sonnet-20240229",
+    "claude-3-haiku-20240307",
+    # Add newer Anthropic models here as needed
+}
+
+
+def generate(access_counts: dict, api_key: str, model: Optional[str] = None) -> str:
+    """
+    Generate HOT/WARM/COLD classifications using Anthropic Claude.
+
+    - Uses Anthropic official SDK (no OpenRouter).
+    - Requires explicit api_key (no env fallback).
+    - model: any Anthropic Claude model string; defaults to DEFAULT_ANTHROPIC_MODEL.
+    - Returns raw text; llm_factory handles JSON cleaning/parsing.
+    """
     if not access_counts:
         return "No access data provided."
 
+    if not api_key:
+        raise ValueError("Claude API error: API key is required but missing.")
+
+    chosen_model = (model or DEFAULT_ANTHROPIC_MODEL).strip()
+    if ALLOWED_ANTHROPIC_MODELS is not None and chosen_model not in ALLOWED_ANTHROPIC_MODELS:
+        raise ValueError(f"Claude API error: Model '{chosen_model}' is not allowed.")
+
     prompt = build_prompt(access_counts)
 
-    # Fallback to env if no key passed
-    final_key = api_key or os.getenv("OPENROUTER_API_KEY")
-
-    if not final_key:
-        return "No API key provided."
-
-    headers = {
-        "Authorization": f"Bearer {final_key}",
-        "Content-Type": "application/json",
-        "X-Title": "TierSense"
-    }
-
-    payload = {
-        "model": "anthropic/claude-3.5-sonnet",
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
-    }
-
     try:
-        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        raw = data["choices"][0]["message"]["content"]
+        client = Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model=chosen_model,
+            max_tokens=2000,
+            temperature=0.1,
+            messages=[{"role": "user", "content": prompt}],
+        )
 
-        print("Claude LLM response:")
-        print(repr(raw))
+        if not resp or not getattr(resp, "content", None):
+            raise ValueError("Claude API returned an invalid response.")
 
-        return _extract_json(raw)
+        # Concatenate all text blocks from the response
+        parts = []
+        for block in resp.content:
+            if getattr(block, "type", "") == "text" and hasattr(block, "text"):
+                parts.append(block.text)
 
-    except requests.RequestException as req_err:
-        return f"Claude API error (HTTP): {req_err}"
-    except ValueError as parse_err:
-        return f"Claude response parsing error: {parse_err}"
+        text = "\n".join(parts).strip()
+        if not text:
+            raise ValueError("Claude API returned empty content.")
+
+        return text
+
     except Exception as e:
-        return f"Claude unexpected error: {e}"
-
-
-def _extract_json(raw: str) -> str:
-    cleaned = re.sub(r"```(?:json)?\s*([\s\S]*?)\s*```", r"\1", raw).strip()
-    try:
-        parsed = json.loads(cleaned)
-        return json.dumps(parsed, indent=2)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"LLM did not return valid JSON: {e}")
+        raise ValueError(f"Claude API error: {e}")

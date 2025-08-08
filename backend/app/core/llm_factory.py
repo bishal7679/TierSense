@@ -1,45 +1,56 @@
 import os
 import json
 import re
-from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 from app.core.llms import gemini, gpt, claude, llama, deepseek
 
+
+# Dispatch map:
+# - gpt/openai => OpenAI SDK (any GPT model via kwargs["model"])
+# - claude     => Anthropic SDK (any Claude model via kwargs["model"])
+# - llama/ollama => OpenAI-compatible LLaMA endpoint (or custom base_url) via kwargs["model"], kwargs["base_url"]
+# - deepseek   => DeepSeek HTTP API (any model via kwargs["model"])
+# - gemini     => Google Generative AI (fixed model internally or extend similarly)
 LLM_DISPATCH = {
-    "gemini": gemini.generate,
-    "gpt": gpt.generate,
-    "openai": gpt.generate,
-    "openrouter": gpt.generate,
-    "claude": claude.generate,
-    "ollama": llama.generate,
-    "llama": llama.generate,
-    "deepseek": deepseek.generate,
+    "gemini": lambda counts, key, **kw: gemini.generate(counts, key),
+    "gpt":    lambda counts, key, **kw: gpt.generate(counts, key, model=kw.get("model")),
+    "openai": lambda counts, key, **kw: gpt.generate(counts, key, model=kw.get("model")),
+    "openrouter": lambda counts, key, **kw: gpt.generate(counts, key, model=kw.get("model")),  # kept for backward-compat
+    "claude": lambda counts, key, **kw: claude.generate(counts, key, model=kw.get("model")),
+    "ollama": lambda counts, key, **kw: llama.generate(counts, key, model=kw.get("model"), base_url=kw.get("base_url")),
+    "llama":  lambda counts, key, **kw: llama.generate(counts, key, model=kw.get("model"), base_url=kw.get("base_url")),
+    "deepseek": lambda counts, key, **kw: deepseek.generate(counts, key, model=kw.get("model")),
 }
 
 
 def generate_tiering_suggestions(
     llm_type: str,
     access_counts: Dict[str, int],
-    api_key: str = None
+    api_key: str = None,
+    **kwargs
 ) -> Dict[str, Any]:
     """
     1. Call the selected LLM to classify files into tiers.
     2. Clean and parse the JSON response.
     3. Enrich each file entry with dynamic suggestions and metadata.
+
+    kwargs:
+      - model: optional model name for gpt/claude/llama/deepseek adapters
+      - base_url: optional OpenAI-compatible base URL for llama adapter
     """
     llm = llm_type.lower()
     if llm not in LLM_DISPATCH:
         raise ValueError(f"Unsupported LLM type: {llm}")
 
-    # 1. Invoke LLM
-    raw = LLM_DISPATCH[llm](access_counts, api_key)
+    # 1. Invoke LLM (pass through optional model/base_url without breaking callers)
+    raw = LLM_DISPATCH[llm](access_counts, api_key, **kwargs)
     print(f"[+] Invoking LLM: {llm}")
     print(f"[DEBUG] Raw LLM output:\n{raw}")
 
     # 2. Strip markdown fences
     cleaned = raw
-    cleaned =  re.sub(r'^\s*```(?:json)?\s*', '', cleaned, flags=re.IGNORECASE | re.MULTILINE)
+    cleaned = re.sub(r'^\s*```(?:json)?\s*', '', cleaned, flags=re.IGNORECASE | re.MULTILINE)
     cleaned = re.sub(r'\s*```$', '', cleaned, flags=re.MULTILINE)
 
     # 3. Trim leading non-JSON text
@@ -71,7 +82,7 @@ def generate_tiering_suggestions(
     # 7. Normalize and build analysis entries
     normalized = {os.path.normpath(p): cnt for p, cnt in access_counts.items()}
     summary = {"total_files": 0, "hot_tier": 0, "warm_tier": 0, "cold_tier": 0}
-    raw_analysis: List[Dict[str, Any]] = []
+    raw_analysis = []
 
     for raw_path, raw_tier in parsed.items():
         path = os.path.normpath(raw_path if raw_path.startswith('/') else f"/{raw_path}")
@@ -96,10 +107,7 @@ def generate_tiering_suggestions(
     return {"summary": summary, "analysis": enriched}
 
 
-def _attach_suggestions_and_metadata(
-    analysis: List[Dict[str, Any]],
-    access_counts: Dict[str, int]
-) -> List[Dict[str, Any]]:
+def _attach_suggestions_and_metadata(analysis, access_counts):
     """For each file, add a context-aware suggestion and filesystem metadata."""
     return [
         {
@@ -111,18 +119,14 @@ def _attach_suggestions_and_metadata(
     ]
 
 
-def _generate_suggestion(
-    item: Dict[str, Any],
-    all_counts: Dict[str, int]
-) -> str:
+def _generate_suggestion(item, all_counts) -> str:
     """Return a tailored recommendation based on tier, frequency, and file context."""
     tier = item["tier"]
     freq = item["access_frequency"]
     sorted_vals = sorted(all_counts.values(), reverse=True)
-    percentile = sorted_vals.index(freq) / max(1, len(sorted_vals)) * 100
+    percentile = sorted_vals.index(freq) / max(1, len(sorted_vals)) * 100 if freq in sorted_vals else 0.0
 
     ext = os.path.splitext(item["path"])[1].lower()
-    name = os.path.basename(item["path"])
 
     if tier == "HOT":
         if freq >= 200:

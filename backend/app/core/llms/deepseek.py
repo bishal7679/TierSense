@@ -1,61 +1,76 @@
-import os
-import json
+from typing import Optional, Iterable
 import requests
-import re
 from app.core.llms.shared_prompt import build_prompt
 
-# OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+# Default DeepSeek model; can be overridden per request
+DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
 
-def generate(access_counts: dict, api_key: str = None) -> str:
+# Optional allowlist. Set to None to allow any DeepSeek model string.
+ALLOWED_DEEPSEEK_MODELS: Optional[Iterable[str]] = {
+    "deepseek-chat",
+    "deepseek-reasoner",
+    # add more official DeepSeek models here as needed
+}
+
+API_BASE = "https://api.deepseek.com/v1/chat/completions"
+
+
+def generate(access_counts: dict, api_key: str, model: Optional[str] = None) -> str:
+    """
+    Generate HOT/WARM/COLD classifications using DeepSeek models.
+
+    - Uses DeepSeek official HTTP API (no OpenRouter).
+    - Requires explicit api_key (no env fallback).
+    - model: any DeepSeek model string; defaults to DEFAULT_DEEPSEEK_MODEL.
+    - Returns raw text; llm_factory handles JSON cleaning/parsing.
+    """
     if not access_counts:
         return "No access data provided."
 
+    if not api_key:
+        raise ValueError("DeepSeek API error: API key is required but missing.")
+
+    chosen_model = (model or DEFAULT_DEEPSEEK_MODEL).strip()
+    if ALLOWED_DEEPSEEK_MODELS is not None and chosen_model not in ALLOWED_DEEPSEEK_MODELS:
+        raise ValueError(f"DeepSeek API error: Model '{chosen_model}' is not allowed.")
+
     prompt = build_prompt(access_counts)
 
-    # Fallback to env if no key passed
-    final_key = api_key or os.getenv("OPENROUTER_API_KEY")
-
-    if not final_key:
-        return "No API key provided."
-
     headers = {
-        "Authorization": f"Bearer {final_key}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "X-Title": "TierSense"
     }
-
     payload = {
-        "model": "deepseek/deepseek-r1-0528-qwen3-8b:free",
+        "model": chosen_model,
         "messages": [
             {"role": "user", "content": prompt}
-        ]
+        ],
+        "temperature": 0.1,
+        "max_tokens": 2000,
     }
 
     try:
-        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        raw = data["choices"][0]["message"]["content"]
+        resp = requests.post(API_BASE, headers=headers, json=payload, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
 
-        print("📦 DeepSeek LLM response:")
-        print(repr(raw))  # for debugging
+        # Expect OpenAI-compatible shape
+        if not data or "choices" not in data or not data["choices"]:
+            raise ValueError("DeepSeek API returned an invalid response.")
 
-        return _extract_json(raw)
+        message = data["choices"][0].get("message", {})
+        content = (message.get("content") or "").strip()
+        if not content:
+            raise ValueError("DeepSeek API returned empty content.")
 
-    except requests.RequestException as req_err:
-        return f"DeepSeek API error (HTTP): {req_err}"
-    except ValueError as parse_err:
-        return f"DeepSeek response parsing error: {parse_err}"
+        return content
+
+    except requests.HTTPError as e:
+        # Bubble up useful server error text if present
+        try:
+            err = resp.json()
+        except Exception:
+            err = resp.text
+        raise ValueError(f"DeepSeek API error (HTTP): {e}; details: {err}")
     except Exception as e:
-        return f"DeepSeek unexpected error: {e}"
-
-
-def _extract_json(raw: str) -> str:
-    # output if wrapped in ```json ... ```
-    cleaned = re.sub(r"```(?:json)?\s*([\s\S]*?)\s*```", r"\1", raw).strip()
-
-    try:
-        parsed = json.loads(cleaned)
-        return json.dumps(parsed, indent=2)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"LLM did not return valid JSON: {e}")
+        raise ValueError(f"DeepSeek API error: {e}")
